@@ -129,7 +129,7 @@ runs:
       id: pbuilder-cache
       uses: actions/cache@v6
       with:
-        path: /var/cache/pbuilder/base-${{ inputs.series }}.tgz
+        path: ~/pbuilder-cache/base-${{ inputs.series }}.tgz
         key: pbuilder-${{ inputs.series }}-${{ github.run_id }}
         restore-keys: |
           pbuilder-${{ inputs.series }}-
@@ -142,7 +142,15 @@ runs:
         PPA: ${{ inputs.ppa }}
       run: |
         set -eux
+        CACHE_DIR="$HOME/pbuilder-cache"
+        CACHE_FILE="$CACHE_DIR/base-${SERIES}.tgz"
         BASE="/var/cache/pbuilder/base-${SERIES}.tgz"
+        # restore from user-writable cache location if present
+        if [[ -f "$CACHE_FILE" ]]; then
+          sudo mkdir -p /var/cache/pbuilder
+          sudo mv "$CACHE_FILE" "$BASE"
+          echo "reuse cached chroot: $BASE"
+        fi
         # 生成pbuilderrc: 若已拿到PPA key用signed-by,否则允许untrusted(首轮空PPA)
         if [[ "${PPA_ALLOW_UNTRUSTED:-yes}" == "no" ]]; then
           KEYRING_LINE="OTHERMIRROR=\"deb [signed-by=${PPA_KEYRING}] http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main\""
@@ -163,7 +171,10 @@ runs:
         ${BINDMOUNTS_LINE}
         EOF
         if [[ ! -f "$BASE" ]]; then
+          sudo mkdir -p /var/cache/pbuilder
           sudo pbuilder create --distribution "$SERIES" --basetgz "$BASE"
-        else
-          echo "reuse cached chroot: $BASE"
+          # copy to user-writable location so actions/cache post-step can save it
+          mkdir -p "$CACHE_DIR"
+          sudo cp "$BASE" "$CACHE_FILE"
+          sudo chown "$USER" "$CACHE_FILE"
         fi
