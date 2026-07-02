@@ -57,16 +57,31 @@ runs:
       shell: bash
       env:
         GPG_PRIVATE_KEY: ${{ inputs.gpg-private-key }}
+        GPG_PASSPHRASE: ${{ inputs.gpg-passphrase }}
         GPG_KEY_ID: ${{ inputs.gpg-key-id }}
       run: |
         set -eu
         export GNUPGHOME="$RUNNER_TEMP/.gnupg"
         mkdir -p "$GNUPGHOME"
         chmod 700 "$GNUPGHOME"
-        echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-        echo "allow-loopback-pinentry" >> "$GNUPGHOME/gpg-agent.conf"
-        echo "pinentry-mode loopback" >> "$GNUPGHOME/gpg.conf"
-        gpgconf --kill gpg-agent
+        # 先写 conf 再 import,让 agent 起来就带 loopback
+        cat > "$GNUPGHOME/gpg-agent.conf" <<EOF
+        allow-loopback-pinentry
+        default-cache-ttl 21600
+        max-cache-ttl 31536000
+        EOF
+        cat > "$GNUPGHOME/gpg.conf" <<EOF
+        pinentry-mode loopback
+        no-tty
+        batch
+        EOF
+        # 确保没老 agent 残留
+        gpgconf --kill gpg-agent 2>/dev/null || true
+        # 导入私钥,--pinentry-mode loopback 保 agent 不弹 tty
+        echo "$GPG_PRIVATE_KEY" | gpg --batch --pinentry-mode loopback --import
+        # 预热 passphrase 到 agent (让后续 debsign 直接命中 cache)
+        echo "test" | gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
+          --local-user "$GPG_KEY_ID" -as -o /dev/null || echo "::warning::passphrase warm-up failed"
         gpg --list-secret-keys "$GPG_KEY_ID"
         echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
         echo "DEBSIGN_KEYID=$GPG_KEY_ID" >> "$GITHUB_ENV"
@@ -80,7 +95,7 @@ runs:
         WRAP="$RUNNER_TEMP/gpg-wrapper.sh"
         cat > "$WRAP" <<EOS
         #!/usr/bin/env bash
-        exec gpg --homedir "${GNUPGHOME}" --batch --pinentry-mode loopback --passphrase "\${GPG_PASSPHRASE}" "\$@"
+        exec gpg --homedir "${GNUPGHOME}" --no-tty --batch --pinentry-mode loopback --passphrase "\${GPG_PASSPHRASE}" "\$@"
         EOS
         chmod +x "$WRAP"
         echo "DEBSIGN_PROGRAM=$WRAP" >> "$GITHUB_ENV"
