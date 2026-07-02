@@ -1,5 +1,5 @@
---- a/debian/control	2026-07-02 17:32:25.118438403 +0800
-+++ b/debian/control	2026-07-02 17:33:26.970576834 +0800
+--- a/debian/control	2026-07-02 18:13:38.899957782 +0800
++++ b/debian/control	2026-07-02 18:13:46.155983400 +0800
 @@ -7,7 +7,7 @@
  Build-Depends:
   appstream,
@@ -9,3 +9,12 @@
   extra-cmake-modules,
   fcitx5-module-lua-dev,
   fcitx5-modules-dev (>= 5.1.20~),
+@@ -22,7 +22,7 @@
+  libimecore-dev (>= 1.1.14),
+  libimepinyin-dev (>= 1.1.14),
+  libimetable-dev (>= 1.1.14),
+- libopencc-dev (>= 1.1.9~),
++ libopencc-dev,
+  pkgconf,
+  qt6-base-dev,
+  qt6-webengine-dev [amd64 arm64 armhf i386 mips64el],
