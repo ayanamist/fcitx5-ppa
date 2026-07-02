@@ -152,13 +152,16 @@ runs:
           echo "reuse cached chroot: $BASE"
         fi
         # 生成pbuilderrc: 若已拿到PPA key用signed-by,否则允许untrusted(首轮空PPA)
+        # noble-updates/noble-security 含许多 backport 版本 (如 wayland-protocols 1.45),
+        # 必须加进 OTHERMIRROR 否则 chroot 只看到 noble 主仓的老版本
+        BASE_MIRRORS="deb http://archive.ubuntu.com/ubuntu ${SERIES}-updates main universe | deb http://archive.ubuntu.com/ubuntu ${SERIES}-security main universe"
         if [[ "${PPA_ALLOW_UNTRUSTED:-yes}" == "no" ]]; then
-          KEYRING_LINE="OTHERMIRROR=\"deb [signed-by=${PPA_KEYRING}] http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main\""
+          KEYRING_LINE="OTHERMIRROR=\"${BASE_MIRRORS} | deb [signed-by=${PPA_KEYRING}] http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main\""
           UNTRUSTED_LINE="ALLOWUNTRUSTED=no"
           # BINDMOUNTS让chroot访问keyring
           BINDMOUNTS_LINE="BINDMOUNTS=\"${PPA_KEYRING%/*}\""
         else
-          KEYRING_LINE="OTHERMIRROR=\"deb http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main\""
+          KEYRING_LINE="OTHERMIRROR=\"${BASE_MIRRORS} | deb http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main\""
           UNTRUSTED_LINE="ALLOWUNTRUSTED=yes"
           BINDMOUNTS_LINE=""
         fi
