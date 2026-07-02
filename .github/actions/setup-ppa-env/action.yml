@@ -108,7 +108,7 @@ runs:
 
     - name: Cache pbuilder chroot
       id: pbuilder-cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: /var/cache/pbuilder/base-${{ inputs.series }}.tgz
         key: pbuilder-${{ inputs.series }}-${{ github.run_id }}

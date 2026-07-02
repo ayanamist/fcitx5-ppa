@@ -60,7 +60,7 @@ echo "Target PPA version: ${NEW_VERSION}"
 
 export DEBEMAIL="${DEBEMAIL:?}"
 export DEBFULLNAME="${DEBFULLNAME:?}"
-dch --force-distribution --force-bad-version \
+dch --force-distribution --allow-lower-version '.*' \
     -v "$NEW_VERSION" \
     -D "$SERIES" \
     "Automated rebuild for ${SERIES} PPA (from Debian sid ${DEB_VERSION})."
