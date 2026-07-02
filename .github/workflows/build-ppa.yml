@@ -27,7 +27,7 @@ jobs:
   stage1:
     name: Stage 1 (leaves)
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -50,14 +50,6 @@ jobs:
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Wait for Launchpad publish
-        if: steps.build.outputs.uploaded_version != '' && steps.build.outputs.skipped != 'true'
-        env:
-          TIMEOUT_SEC: 7200
-        run: |
-          scripts/wait-for-publish.sh \
-            "$OWNER" "$PPA" "${{ matrix.package }}" \
-            "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
       - name: Upload build artifacts
         if: always() && steps.build.outputs.uploaded_version != ''
         uses: actions/upload-artifact@v7
@@ -72,7 +64,7 @@ jobs:
     name: Stage 2 (fcitx5)
     needs: stage1
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -106,14 +98,6 @@ jobs:
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Wait for Launchpad publish
-        if: steps.build.outputs.uploaded_version != '' && steps.build.outputs.skipped != 'true'
-        env:
-          TIMEOUT_SEC: 7200
-        run: |
-          scripts/wait-for-publish.sh \
-            "$OWNER" "$PPA" "${{ matrix.package }}" \
-            "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
       - name: Upload build artifacts
         if: always() && steps.build.outputs.uploaded_version != ''
         uses: actions/upload-artifact@v7
@@ -128,7 +112,7 @@ jobs:
     name: Stage 3 (libime, fcitx5-qt, fcitx5-rime)
     needs: stage2
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -162,14 +146,6 @@ jobs:
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Wait for Launchpad publish
-        if: steps.build.outputs.uploaded_version != '' && steps.build.outputs.skipped != 'true'
-        env:
-          TIMEOUT_SEC: 7200
-        run: |
-          scripts/wait-for-publish.sh \
-            "$OWNER" "$PPA" "${{ matrix.package }}" \
-            "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
       - name: Upload build artifacts
         if: always() && steps.build.outputs.uploaded_version != ''
         uses: actions/upload-artifact@v7
@@ -184,7 +160,7 @@ jobs:
     name: Stage 4 (fcitx5-chinese-addons)
     needs: stage3
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -218,14 +194,6 @@ jobs:
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Wait for Launchpad publish
-        if: steps.build.outputs.uploaded_version != '' && steps.build.outputs.skipped != 'true'
-        env:
-          TIMEOUT_SEC: 7200
-        run: |
-          scripts/wait-for-publish.sh \
-            "$OWNER" "$PPA" "${{ matrix.package }}" \
-            "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
       - name: Upload build artifacts
         if: always() && steps.build.outputs.uploaded_version != ''
         uses: actions/upload-artifact@v7
