@@ -36,15 +36,24 @@ echo "PPA current version: ${PPA_VER:-none}"
 BASE_SUFFIX="~${SERIES}1~ppa"
 EXPECTED_PREFIX="${DEB_VERSION}${BASE_SUFFIX}"
 
-# 若 PPA 已发布版本 >= 期望首个 (~ppa1),说明 upstream 未涨或涨得更慢, 跳过
+# 若 PPA 已发布版本 >= 期望首个 (~ppa1),说明 upstream 未涨或涨得更慢
+# 但若 DEB_CACHE_DIR 里已有该版本 deb, 直接跳过 (无需重编)
+# 若 cache 缺失, 仍需跑 pbuilder 补 cache, 但跳过 dput
+SKIP_UPLOAD=false
 if [[ -n "$PPA_VER" ]]; then
   if dpkg --compare-versions "$PPA_VER" ge "${EXPECTED_PREFIX}1"; then
-    echo "::notice::PPA has version ${PPA_VER} >= ${EXPECTED_PREFIX}1; skip."
-    if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-      echo "uploaded_version=" >> "$GITHUB_OUTPUT"
-      echo "skipped=true" >> "$GITHUB_OUTPUT"
+    CACHE_DIR="${DEB_CACHE_DIR:-}"
+    if [[ -n "$CACHE_DIR" ]] && ls "$CACHE_DIR"/*.deb >/dev/null 2>&1; then
+      echo "::notice::PPA has ${PPA_VER} >= ${EXPECTED_PREFIX}1 and cache hit; skip."
+      if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+        echo "uploaded_version=" >> "$GITHUB_OUTPUT"
+        echo "skipped=true" >> "$GITHUB_OUTPUT"
+      fi
+      exit 0
+    else
+      echo "::notice::PPA has ${PPA_VER} >= ${EXPECTED_PREFIX}1 but cache miss; rebuild for cache (no dput)."
+      SKIP_UPLOAD=true
     fi
-    exit 0
   fi
 fi
 
@@ -160,6 +169,7 @@ HDR
     want="${EXPECTED_DEV_VERSIONS[$dev]}"
     printf 'check %q %q\n' "$dev" "$want"
   done
+  # shellcheck disable=SC2016
   echo 'exit $fail'
 } > "$HOOK"
 chmod +x "$HOOK"
@@ -208,6 +218,12 @@ echo "::endgroup::"
 echo "pbuilder OK; artifacts:"
 ls -la "$BUILDRESULT"
 
+# 若 DEB_CACHE_DIR 设置了, copy binary deb 到 cache 目录供跨 run 复用
+if [[ -n "${DEB_CACHE_DIR:-}" ]]; then
+  mkdir -p "$DEB_CACHE_DIR"
+  find "$BUILDRESULT" -name '*.deb' -exec cp -v {} "$DEB_CACHE_DIR/" \;
+fi
+
 # 若 ARTIFACT_DIR 设置了, copy 所有产物 (source + binary deb) 供 workflow 上传
 if [[ -n "${ARTIFACT_DIR:-}" ]]; then
   mkdir -p "$ARTIFACT_DIR"
@@ -223,6 +239,14 @@ if [[ -n "${ARTIFACT_DIR:-}" ]]; then
 fi
 
 # 4) 上传源码包到 PPA
+if [[ "$SKIP_UPLOAD" == "true" ]]; then
+  echo "::notice::Skipping dput (PPA already has ${PPA_VER}); rebuilt for cache only."
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    echo "uploaded_version=" >> "$GITHUB_OUTPUT"
+    echo "skipped=true" >> "$GITHUB_OUTPUT"
+  fi
+  exit 0
+fi
 echo "Uploading ${CHANGES}"
 dput "ppa:${OWNER}/${PPA}" "$CHANGES"
 

@@ -44,23 +44,24 @@ jobs:
           series: ${{ env.SERIES }}
           owner: ${{ env.OWNER }}
           ppa: ${{ env.PPA }}
+      - name: Resolve deb version
+        id: ver
+        run: |
+          chmod +x scripts/*.sh
+          scripts/resolve-deb-version.sh "${{ matrix.package }}"
+      - name: Cache own debs
+        uses: actions/cache@v4
+        with:
+          key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
+          path: ~/deb-cache/${{ matrix.package }}
       - name: Build and upload
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-          ARTIFACT_DIR: ${{ runner.temp }}/artifacts
+          DEB_CACHE_DIR: ${{ runner.home }}/deb-cache/${{ matrix.package }}
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Upload build artifacts
-        if: always() && steps.build.outputs.uploaded_version != ''
-        uses: actions/upload-artifact@v7
-        with:
-          name: debs-${{ matrix.package }}
-          path: ${{ runner.temp }}/artifacts
-          if-no-files-found: warn
-          retention-days: 14
-          overwrite: true
 
   stage2:
     name: Stage 2 (fcitx5)
@@ -81,34 +82,53 @@ jobs:
           series: ${{ env.SERIES }}
           owner: ${{ env.OWNER }}
           ppa: ${{ env.PPA }}
-      - name: Download upstream artifacts
-        uses: actions/download-artifact@v8
+      - name: Resolve deb version (self)
+        id: ver
+        run: |
+          chmod +x scripts/*.sh
+          scripts/resolve-deb-version.sh "${{ matrix.package }}"
+      - name: Resolve deb version (librime)
+        id: ver_librime
+        run: scripts/resolve-deb-version.sh librime
+      - name: Resolve deb version (yoga)
+        id: ver_yoga
+        run: scripts/resolve-deb-version.sh yoga
+      - name: Resolve deb version (fcitx5-gtk)
+        id: ver_fcitx5_gtk
+        run: scripts/resolve-deb-version.sh fcitx5-gtk
+      - name: Restore debs (librime)
+        uses: actions/cache/restore@v4
         with:
-          pattern: debs-*
-          path: ${{ runner.temp }}/upstream
-          merge-multiple: false
+          key: debs-librime-${{ env.SERIES }}-${{ steps.ver_librime.outputs.deb_version }}
+          path: ~/deb-cache/librime
+      - name: Restore debs (yoga)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-yoga-${{ env.SERIES }}-${{ steps.ver_yoga.outputs.deb_version }}
+          path: ~/deb-cache/yoga
+      - name: Restore debs (fcitx5-gtk)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-fcitx5-gtk-${{ env.SERIES }}-${{ steps.ver_fcitx5_gtk.outputs.deb_version }}
+          path: ~/deb-cache/fcitx5-gtk
+      - name: Cache own debs
+        uses: actions/cache@v4
+        with:
+          key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
+          path: ~/deb-cache/${{ matrix.package }}
       - name: Build local apt repo
         run: |
           chmod +x scripts/*.sh
-          scripts/build-local-repo.sh "${{ runner.temp }}/upstream" "${{ runner.temp }}/local-repo"
+          scripts/build-local-repo.sh "$HOME/deb-cache" "${{ runner.temp }}/local-repo"
       - name: Build and upload
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-          ARTIFACT_DIR: ${{ runner.temp }}/artifacts
           LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
+          DEB_CACHE_DIR: ${{ runner.home }}/deb-cache/${{ matrix.package }}
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Upload build artifacts
-        if: always() && steps.build.outputs.uploaded_version != ''
-        uses: actions/upload-artifact@v7
-        with:
-          name: debs-${{ matrix.package }}
-          path: ${{ runner.temp }}/artifacts
-          if-no-files-found: warn
-          retention-days: 14
-          overwrite: true
 
   stage3:
     name: Stage 3 (libime, fcitx5-qt, fcitx5-rime)
@@ -129,34 +149,61 @@ jobs:
           series: ${{ env.SERIES }}
           owner: ${{ env.OWNER }}
           ppa: ${{ env.PPA }}
-      - name: Download upstream artifacts
-        uses: actions/download-artifact@v8
+      - name: Resolve deb version (self)
+        id: ver
+        run: |
+          chmod +x scripts/*.sh
+          scripts/resolve-deb-version.sh "${{ matrix.package }}"
+      - name: Resolve deb version (librime)
+        id: ver_librime
+        run: scripts/resolve-deb-version.sh librime
+      - name: Resolve deb version (yoga)
+        id: ver_yoga
+        run: scripts/resolve-deb-version.sh yoga
+      - name: Resolve deb version (fcitx5-gtk)
+        id: ver_fcitx5_gtk
+        run: scripts/resolve-deb-version.sh fcitx5-gtk
+      - name: Resolve deb version (fcitx5)
+        id: ver_fcitx5
+        run: scripts/resolve-deb-version.sh fcitx5
+      - name: Restore debs (librime)
+        uses: actions/cache/restore@v4
         with:
-          pattern: debs-*
-          path: ${{ runner.temp }}/upstream
-          merge-multiple: false
+          key: debs-librime-${{ env.SERIES }}-${{ steps.ver_librime.outputs.deb_version }}
+          path: ~/deb-cache/librime
+      - name: Restore debs (yoga)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-yoga-${{ env.SERIES }}-${{ steps.ver_yoga.outputs.deb_version }}
+          path: ~/deb-cache/yoga
+      - name: Restore debs (fcitx5-gtk)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-fcitx5-gtk-${{ env.SERIES }}-${{ steps.ver_fcitx5_gtk.outputs.deb_version }}
+          path: ~/deb-cache/fcitx5-gtk
+      - name: Restore debs (fcitx5)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-fcitx5-${{ env.SERIES }}-${{ steps.ver_fcitx5.outputs.deb_version }}
+          path: ~/deb-cache/fcitx5
+      - name: Cache own debs
+        uses: actions/cache@v4
+        with:
+          key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
+          path: ~/deb-cache/${{ matrix.package }}
       - name: Build local apt repo
         run: |
           chmod +x scripts/*.sh
-          scripts/build-local-repo.sh "${{ runner.temp }}/upstream" "${{ runner.temp }}/local-repo"
+          scripts/build-local-repo.sh "$HOME/deb-cache" "${{ runner.temp }}/local-repo"
       - name: Build and upload
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-          ARTIFACT_DIR: ${{ runner.temp }}/artifacts
           LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
+          DEB_CACHE_DIR: ${{ runner.home }}/deb-cache/${{ matrix.package }}
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Upload build artifacts
-        if: always() && steps.build.outputs.uploaded_version != ''
-        uses: actions/upload-artifact@v7
-        with:
-          name: debs-${{ matrix.package }}
-          path: ${{ runner.temp }}/artifacts
-          if-no-files-found: warn
-          retention-days: 14
-          overwrite: true
 
   stage4:
     name: Stage 4 (fcitx5-chinese-addons)
@@ -177,31 +224,82 @@ jobs:
           series: ${{ env.SERIES }}
           owner: ${{ env.OWNER }}
           ppa: ${{ env.PPA }}
-      - name: Download upstream artifacts
-        uses: actions/download-artifact@v8
+      - name: Resolve deb version (self)
+        id: ver
+        run: |
+          chmod +x scripts/*.sh
+          scripts/resolve-deb-version.sh "${{ matrix.package }}"
+      - name: Resolve deb version (librime)
+        id: ver_librime
+        run: scripts/resolve-deb-version.sh librime
+      - name: Resolve deb version (yoga)
+        id: ver_yoga
+        run: scripts/resolve-deb-version.sh yoga
+      - name: Resolve deb version (fcitx5-gtk)
+        id: ver_fcitx5_gtk
+        run: scripts/resolve-deb-version.sh fcitx5-gtk
+      - name: Resolve deb version (fcitx5)
+        id: ver_fcitx5
+        run: scripts/resolve-deb-version.sh fcitx5
+      - name: Resolve deb version (libime)
+        id: ver_libime
+        run: scripts/resolve-deb-version.sh libime
+      - name: Resolve deb version (fcitx5-qt)
+        id: ver_fcitx5_qt
+        run: scripts/resolve-deb-version.sh fcitx5-qt
+      - name: Resolve deb version (fcitx5-rime)
+        id: ver_fcitx5_rime
+        run: scripts/resolve-deb-version.sh fcitx5-rime
+      - name: Restore debs (librime)
+        uses: actions/cache/restore@v4
         with:
-          pattern: debs-*
-          path: ${{ runner.temp }}/upstream
-          merge-multiple: false
+          key: debs-librime-${{ env.SERIES }}-${{ steps.ver_librime.outputs.deb_version }}
+          path: ~/deb-cache/librime
+      - name: Restore debs (yoga)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-yoga-${{ env.SERIES }}-${{ steps.ver_yoga.outputs.deb_version }}
+          path: ~/deb-cache/yoga
+      - name: Restore debs (fcitx5-gtk)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-fcitx5-gtk-${{ env.SERIES }}-${{ steps.ver_fcitx5_gtk.outputs.deb_version }}
+          path: ~/deb-cache/fcitx5-gtk
+      - name: Restore debs (fcitx5)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-fcitx5-${{ env.SERIES }}-${{ steps.ver_fcitx5.outputs.deb_version }}
+          path: ~/deb-cache/fcitx5
+      - name: Restore debs (libime)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-libime-${{ env.SERIES }}-${{ steps.ver_libime.outputs.deb_version }}
+          path: ~/deb-cache/libime
+      - name: Restore debs (fcitx5-qt)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-fcitx5-qt-${{ env.SERIES }}-${{ steps.ver_fcitx5_qt.outputs.deb_version }}
+          path: ~/deb-cache/fcitx5-qt
+      - name: Restore debs (fcitx5-rime)
+        uses: actions/cache/restore@v4
+        with:
+          key: debs-fcitx5-rime-${{ env.SERIES }}-${{ steps.ver_fcitx5_rime.outputs.deb_version }}
+          path: ~/deb-cache/fcitx5-rime
+      - name: Cache own debs
+        uses: actions/cache@v4
+        with:
+          key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
+          path: ~/deb-cache/${{ matrix.package }}
       - name: Build local apt repo
         run: |
           chmod +x scripts/*.sh
-          scripts/build-local-repo.sh "${{ runner.temp }}/upstream" "${{ runner.temp }}/local-repo"
+          scripts/build-local-repo.sh "$HOME/deb-cache" "${{ runner.temp }}/local-repo"
       - name: Build and upload
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-          ARTIFACT_DIR: ${{ runner.temp }}/artifacts
           LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
+          DEB_CACHE_DIR: ${{ runner.home }}/deb-cache/${{ matrix.package }}
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Upload build artifacts
-        if: always() && steps.build.outputs.uploaded_version != ''
-        uses: actions/upload-artifact@v7
-        with:
-          name: debs-${{ matrix.package }}
-          path: ${{ runner.temp }}/artifacts
-          if-no-files-found: warn
-          retention-days: 14
-          overwrite: true
