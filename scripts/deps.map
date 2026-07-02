@@ -3,7 +3,8 @@
 # pbuilder D-hook 会检查 chroot 内 <dev-binary-package> 版本是否 >= PPA 中 <upstream-source-package> 最新版本
 # 无 PPA 内依赖的包不出现在此文件 (fcitx5-gtk / librime / yoga)
 fcitx5 libyoga-dev:yoga
+fcitx5-lua libfcitx5core-dev:fcitx5 fcitx5-modules-dev:fcitx5
 fcitx5-qt libfcitx5utils-dev:fcitx5
 fcitx5-rime libfcitx5core-dev:fcitx5 fcitx5-modules-dev:fcitx5 librime-dev:librime
 libime libfcitx5utils-dev:fcitx5
-fcitx5-chinese-addons libfcitx5core-dev:fcitx5 libfcitx5config-dev:fcitx5 libfcitx5utils-dev:fcitx5 fcitx5-modules-dev:fcitx5 fcitx5-module-lua-dev:fcitx5 libimecore-dev:libime libimepinyin-dev:libime libimetable-dev:libime libime-bin:libime libfcitx5-qt6-dev:fcitx5-qt
+fcitx5-chinese-addons libfcitx5core-dev:fcitx5 libfcitx5config-dev:fcitx5 libfcitx5utils-dev:fcitx5 fcitx5-modules-dev:fcitx5 fcitx5-module-lua-dev:fcitx5-lua libimecore-dev:libime libimepinyin-dev:libime libimetable-dev:libime libime-bin:libime libfcitx5-qt6-dev:fcitx5-qt

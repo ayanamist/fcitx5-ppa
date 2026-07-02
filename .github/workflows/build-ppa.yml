@@ -27,7 +27,7 @@ env:
 
 jobs:
   stage1:
-    name: Stage 1 (leaves)
+    name: Stage 1
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -64,7 +64,7 @@ jobs:
           scripts/build-and-upload.sh "${{ matrix.package }}"
 
   stage2:
-    name: Stage 2 (fcitx5)
+    name: Stage 2
     needs: stage1
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -131,14 +131,14 @@ jobs:
           scripts/build-and-upload.sh "${{ matrix.package }}"
 
   stage3:
-    name: Stage 3 (libime, fcitx5-qt, fcitx5-rime)
+    name: Stage 3
     needs: stage2
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        package: [libime, fcitx5-qt, fcitx5-rime]
+        package: [libime, fcitx5-lua, fcitx5-qt, fcitx5-rime]
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-ppa-env
@@ -206,7 +206,7 @@ jobs:
           scripts/build-and-upload.sh "${{ matrix.package }}"
 
   stage4:
-    name: Stage 4 (fcitx5-chinese-addons)
+    name: Stage 4
     needs: stage3
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -250,6 +250,9 @@ jobs:
       - name: Resolve deb version (fcitx5-rime)
         id: ver_fcitx5_rime
         run: scripts/resolve-deb-version.sh fcitx5-rime
+      - name: Resolve deb version (fcitx5-lua)
+        id: ver_fcitx5_lua
+        run: scripts/resolve-deb-version.sh fcitx5-lua
       - name: Restore debs (librime)
         uses: actions/cache/restore@v6
         with:
@@ -285,6 +288,11 @@ jobs:
         with:
           key: debs-fcitx5-rime-${{ env.SERIES }}-${{ steps.ver_fcitx5_rime.outputs.deb_version }}
           path: ~/deb-cache/fcitx5-rime
+      - name: Restore debs (fcitx5-lua)
+        uses: actions/cache/restore@v6
+        with:
+          key: debs-fcitx5-lua-${{ env.SERIES }}-${{ steps.ver_fcitx5_lua.outputs.deb_version }}
+          path: ~/deb-cache/fcitx5-lua
       - name: Cache own debs
         uses: actions/cache@v6
         with:

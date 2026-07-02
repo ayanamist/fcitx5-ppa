@@ -1,0 +1,11 @@
+--- a/debian/control	2026-07-02 19:46:46.635292784 +0800
++++ b/debian/control	2026-07-02 19:46:46.643292798 +0800
+@@ -7,7 +7,7 @@
+ Build-Depends:
+  appstream,
+  cmake,
+- debhelper-compat (= 14),
++ debhelper-compat (= 13),
+  extra-cmake-modules,
+  fcitx5-modules-dev (>= 5.1.14-4~),
+  gettext,
