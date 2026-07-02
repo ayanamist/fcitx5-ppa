@@ -50,7 +50,7 @@ jobs:
           chmod +x scripts/*.sh
           scripts/resolve-deb-version.sh "${{ matrix.package }}"
       - name: Cache own debs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
           path: ~/deb-cache/${{ matrix.package }}
@@ -97,22 +97,22 @@ jobs:
         id: ver_fcitx5_gtk
         run: scripts/resolve-deb-version.sh fcitx5-gtk
       - name: Restore debs (librime)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-librime-${{ env.SERIES }}-${{ steps.ver_librime.outputs.deb_version }}
           path: ~/deb-cache/librime
       - name: Restore debs (yoga)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-yoga-${{ env.SERIES }}-${{ steps.ver_yoga.outputs.deb_version }}
           path: ~/deb-cache/yoga
       - name: Restore debs (fcitx5-gtk)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-fcitx5-gtk-${{ env.SERIES }}-${{ steps.ver_fcitx5_gtk.outputs.deb_version }}
           path: ~/deb-cache/fcitx5-gtk
       - name: Cache own debs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
           path: ~/deb-cache/${{ matrix.package }}
@@ -167,27 +167,27 @@ jobs:
         id: ver_fcitx5
         run: scripts/resolve-deb-version.sh fcitx5
       - name: Restore debs (librime)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-librime-${{ env.SERIES }}-${{ steps.ver_librime.outputs.deb_version }}
           path: ~/deb-cache/librime
       - name: Restore debs (yoga)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-yoga-${{ env.SERIES }}-${{ steps.ver_yoga.outputs.deb_version }}
           path: ~/deb-cache/yoga
       - name: Restore debs (fcitx5-gtk)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-fcitx5-gtk-${{ env.SERIES }}-${{ steps.ver_fcitx5_gtk.outputs.deb_version }}
           path: ~/deb-cache/fcitx5-gtk
       - name: Restore debs (fcitx5)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-fcitx5-${{ env.SERIES }}-${{ steps.ver_fcitx5.outputs.deb_version }}
           path: ~/deb-cache/fcitx5
       - name: Cache own debs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
           path: ~/deb-cache/${{ matrix.package }}
@@ -251,42 +251,42 @@ jobs:
         id: ver_fcitx5_rime
         run: scripts/resolve-deb-version.sh fcitx5-rime
       - name: Restore debs (librime)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-librime-${{ env.SERIES }}-${{ steps.ver_librime.outputs.deb_version }}
           path: ~/deb-cache/librime
       - name: Restore debs (yoga)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-yoga-${{ env.SERIES }}-${{ steps.ver_yoga.outputs.deb_version }}
           path: ~/deb-cache/yoga
       - name: Restore debs (fcitx5-gtk)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-fcitx5-gtk-${{ env.SERIES }}-${{ steps.ver_fcitx5_gtk.outputs.deb_version }}
           path: ~/deb-cache/fcitx5-gtk
       - name: Restore debs (fcitx5)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-fcitx5-${{ env.SERIES }}-${{ steps.ver_fcitx5.outputs.deb_version }}
           path: ~/deb-cache/fcitx5
       - name: Restore debs (libime)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-libime-${{ env.SERIES }}-${{ steps.ver_libime.outputs.deb_version }}
           path: ~/deb-cache/libime
       - name: Restore debs (fcitx5-qt)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-fcitx5-qt-${{ env.SERIES }}-${{ steps.ver_fcitx5_qt.outputs.deb_version }}
           path: ~/deb-cache/fcitx5-qt
       - name: Restore debs (fcitx5-rime)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           key: debs-fcitx5-rime-${{ env.SERIES }}-${{ steps.ver_fcitx5_rime.outputs.deb_version }}
           path: ~/deb-cache/fcitx5-rime
       - name: Cache own debs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
           path: ~/deb-cache/${{ matrix.package }}
