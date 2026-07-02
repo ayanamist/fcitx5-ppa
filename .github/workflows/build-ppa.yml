@@ -63,10 +63,11 @@ jobs:
         if: always() && steps.build.outputs.uploaded_version != ''
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.package }}-${{ steps.build.outputs.uploaded_version }}
+          name: debs-${{ matrix.package }}
           path: ${{ runner.temp }}/artifacts
           if-no-files-found: warn
           retention-days: 14
+          overwrite: true
 
   stage2:
     name: Stage 2 (fcitx5)
@@ -88,11 +89,22 @@ jobs:
           series: ${{ env.SERIES }}
           owner: ${{ env.OWNER }}
           ppa: ${{ env.PPA }}
+      - name: Download upstream artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: debs-*
+          path: ${{ runner.temp }}/upstream
+          merge-multiple: false
+      - name: Build local apt repo
+        run: |
+          chmod +x scripts/*.sh
+          scripts/build-local-repo.sh "${{ runner.temp }}/upstream" "${{ runner.temp }}/local-repo"
       - name: Build and upload
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
           ARTIFACT_DIR: ${{ runner.temp }}/artifacts
+          LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
@@ -108,10 +120,11 @@ jobs:
         if: always() && steps.build.outputs.uploaded_version != ''
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.package }}-${{ steps.build.outputs.uploaded_version }}
+          name: debs-${{ matrix.package }}
           path: ${{ runner.temp }}/artifacts
           if-no-files-found: warn
           retention-days: 14
+          overwrite: true
 
   stage3:
     name: Stage 3 (libime, fcitx5-qt, fcitx5-rime)
@@ -133,11 +146,22 @@ jobs:
           series: ${{ env.SERIES }}
           owner: ${{ env.OWNER }}
           ppa: ${{ env.PPA }}
+      - name: Download upstream artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: debs-*
+          path: ${{ runner.temp }}/upstream
+          merge-multiple: false
+      - name: Build local apt repo
+        run: |
+          chmod +x scripts/*.sh
+          scripts/build-local-repo.sh "${{ runner.temp }}/upstream" "${{ runner.temp }}/local-repo"
       - name: Build and upload
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
           ARTIFACT_DIR: ${{ runner.temp }}/artifacts
+          LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
@@ -153,10 +177,11 @@ jobs:
         if: always() && steps.build.outputs.uploaded_version != ''
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.package }}-${{ steps.build.outputs.uploaded_version }}
+          name: debs-${{ matrix.package }}
           path: ${{ runner.temp }}/artifacts
           if-no-files-found: warn
           retention-days: 14
+          overwrite: true
 
   stage4:
     name: Stage 4 (fcitx5-chinese-addons)
@@ -178,11 +203,22 @@ jobs:
           series: ${{ env.SERIES }}
           owner: ${{ env.OWNER }}
           ppa: ${{ env.PPA }}
+      - name: Download upstream artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: debs-*
+          path: ${{ runner.temp }}/upstream
+          merge-multiple: false
+      - name: Build local apt repo
+        run: |
+          chmod +x scripts/*.sh
+          scripts/build-local-repo.sh "${{ runner.temp }}/upstream" "${{ runner.temp }}/local-repo"
       - name: Build and upload
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
           ARTIFACT_DIR: ${{ runner.temp }}/artifacts
+          LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
@@ -198,7 +234,8 @@ jobs:
         if: always() && steps.build.outputs.uploaded_version != ''
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.package }}-${{ steps.build.outputs.uploaded_version }}
+          name: debs-${{ matrix.package }}
           path: ${{ runner.temp }}/artifacts
           if-no-files-found: warn
           retention-days: 14
+          overwrite: true

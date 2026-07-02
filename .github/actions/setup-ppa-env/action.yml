@@ -50,6 +50,7 @@ runs:
           devscripts dput debhelper dpkg-dev \
           dh-sequence-gir gobject-introspection \
           pbuilder ubuntu-dev-tools \
+          apt-utils \
           distro-info distro-info-data libdistro-info-perl \
           gnupg curl jq ca-certificates
 

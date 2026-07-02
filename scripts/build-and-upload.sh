@@ -167,10 +167,24 @@ else
   UNTRUSTED_ARGS=(--allow-untrusted)
 fi
 
+# 若 LOCAL_REPO_DIR 设置(上游 stage 的 pbuilder 产物聚合),
+# 加进 pbuilder OTHERMIRROR, 让本地编译先看到最新 -dev, 无需等 Launchpad publish
+if [[ -n "${LOCAL_REPO_DIR:-}" && -f "${LOCAL_REPO_DIR}/Packages" ]]; then
+  echo "using local repo: ${LOCAL_REPO_DIR}"
+  OTHER_MIRROR="${OTHER_MIRROR} | deb [trusted=yes] file://${LOCAL_REPO_DIR} ./"
+  # 未签名 local repo 需 allow-untrusted 或 [trusted=yes]
+  UNTRUSTED_ARGS+=(--allow-untrusted)
+  # bindmount 让 chroot 内可访问 host 上的 repo 目录
+  BIND_ARG=(--bindmounts "${LOCAL_REPO_DIR}")
+else
+  BIND_ARG=()
+fi
+
 sudo -E pbuilder update --override-config \
   --distribution "$SERIES" \
   --basetgz "${PBUILDER_BASE:-/var/cache/pbuilder/base-${SERIES}.tgz}" \
   --othermirror "$OTHER_MIRROR" \
+  "${BIND_ARG[@]}" \
   "${UNTRUSTED_ARGS[@]}"
 sudo -E pbuilder build \
   --distribution "$SERIES" \
@@ -178,6 +192,7 @@ sudo -E pbuilder build \
   --buildresult "$BUILDRESULT" \
   --logfile "$WORKDIR/pbuilder-${PKG}.log" \
   --hookdir "$HOOKDIR" \
+  "${BIND_ARG[@]}" \
   "$DSC"
 echo "::endgroup::"
 echo "pbuilder OK; artifacts:"
