@@ -58,6 +58,23 @@ fi
 NEW_VERSION="${EXPECTED_PREFIX}${NEW_N}"
 echo "Target PPA version: ${NEW_VERSION}"
 
+# 放宽 build-dep 版本约束: sid 里 (>= X) / (>> X) 若 X 高于 noble,
+# 且 API 兼容, 用 sed 去掉版本约束. 表在 scripts/relax-deps.map
+RELAX_MAP="${GITHUB_WORKSPACE}/scripts/relax-deps.map"
+if [[ -f "$RELAX_MAP" ]]; then
+  RELAX_LIST="$(awk -v p="$PKG" '$1==p {$1=""; sub(/^ /,""); print; exit}' "$RELAX_MAP")"
+  if [[ -n "$RELAX_LIST" ]]; then
+    echo "::group::relax build-deps: ${RELAX_LIST}"
+    for dep in $RELAX_LIST; do
+      # 匹配 "<dep> (op version)" 保留包名去掉括号约束.
+      # 用 perl 更稳(处理 alt "|", 多行, 空白)
+      perl -i -pe "s/\Q${dep}\E\s*\([^)]*\)/${dep}/g" debian/control
+      echo "  relaxed: ${dep}"
+    done
+    echo "::endgroup::"
+  fi
+fi
+
 export DEBEMAIL="${DEBEMAIL:?}"
 export DEBFULLNAME="${DEBFULLNAME:?}"
 dch --force-distribution --allow-lower-version '.*' \
