@@ -47,6 +47,7 @@ jobs:
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          ARTIFACT_DIR: ${{ runner.temp }}/artifacts
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
@@ -58,6 +59,14 @@ jobs:
           scripts/wait-for-publish.sh \
             "$OWNER" "$PPA" "${{ matrix.package }}" \
             "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
+      - name: Upload build artifacts
+        if: always() && steps.build.outputs.uploaded_version != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.package }}-${{ steps.build.outputs.uploaded_version }}
+          path: ${{ runner.temp }}/artifacts
+          if-no-files-found: warn
+          retention-days: 14
 
   stage2:
     name: Stage 2 (fcitx5)
@@ -83,6 +92,7 @@ jobs:
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          ARTIFACT_DIR: ${{ runner.temp }}/artifacts
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
@@ -94,6 +104,14 @@ jobs:
           scripts/wait-for-publish.sh \
             "$OWNER" "$PPA" "${{ matrix.package }}" \
             "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
+      - name: Upload build artifacts
+        if: always() && steps.build.outputs.uploaded_version != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.package }}-${{ steps.build.outputs.uploaded_version }}
+          path: ${{ runner.temp }}/artifacts
+          if-no-files-found: warn
+          retention-days: 14
 
   stage3:
     name: Stage 3 (libime, fcitx5-qt, fcitx5-rime)
@@ -119,6 +137,7 @@ jobs:
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          ARTIFACT_DIR: ${{ runner.temp }}/artifacts
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
@@ -130,6 +149,14 @@ jobs:
           scripts/wait-for-publish.sh \
             "$OWNER" "$PPA" "${{ matrix.package }}" \
             "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
+      - name: Upload build artifacts
+        if: always() && steps.build.outputs.uploaded_version != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.package }}-${{ steps.build.outputs.uploaded_version }}
+          path: ${{ runner.temp }}/artifacts
+          if-no-files-found: warn
+          retention-days: 14
 
   stage4:
     name: Stage 4 (fcitx5-chinese-addons)
@@ -155,6 +182,7 @@ jobs:
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          ARTIFACT_DIR: ${{ runner.temp }}/artifacts
         run: |
           chmod +x scripts/*.sh
           scripts/build-and-upload.sh "${{ matrix.package }}"
@@ -166,3 +194,11 @@ jobs:
           scripts/wait-for-publish.sh \
             "$OWNER" "$PPA" "${{ matrix.package }}" \
             "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
+      - name: Upload build artifacts
+        if: always() && steps.build.outputs.uploaded_version != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.package }}-${{ steps.build.outputs.uploaded_version }}
+          path: ${{ runner.temp }}/artifacts
+          if-no-files-found: warn
+          retention-days: 14

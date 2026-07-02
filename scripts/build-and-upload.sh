@@ -183,6 +183,20 @@ echo "::endgroup::"
 echo "pbuilder OK; artifacts:"
 ls -la "$BUILDRESULT"
 
+# 若 ARTIFACT_DIR 设置了, copy 所有产物 (source + binary deb) 供 workflow 上传
+if [[ -n "${ARTIFACT_DIR:-}" ]]; then
+  mkdir -p "$ARTIFACT_DIR"
+  cp -v "$BUILDRESULT"/* "$ARTIFACT_DIR/" 2>/dev/null || true
+  # source 包相关文件从 $WORKDIR copy (pbuilder 输出只含 binary deb)
+  find "$WORKDIR" -maxdepth 1 -type f \( \
+       -name "${PKG}_${UPLOAD_VERSION_NOEPOCH}.dsc" \
+    -o -name "${PKG}_${UPLOAD_VERSION_NOEPOCH}*.tar.*" \
+    -o -name "${PKG}_${UPLOAD_VERSION_NOEPOCH}_source.changes" \
+    -o -name "${PKG}_${UPLOAD_VERSION_NOEPOCH}_source.buildinfo" \
+    -o -name "pbuilder-${PKG}.log" \
+    \) -exec cp -v {} "$ARTIFACT_DIR/" \;
+fi
+
 # 4) 上传源码包到 PPA
 echo "Uploading ${CHANGES}"
 dput "ppa:${OWNER}/${PPA}" "$CHANGES"
