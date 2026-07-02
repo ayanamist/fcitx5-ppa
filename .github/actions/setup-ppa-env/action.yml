@@ -48,6 +48,7 @@ runs:
       run: |
         sudo apt-get install -y --no-install-recommends \
           devscripts dput debhelper dpkg-dev \
+          dh-sequence-gir gobject-introspection \
           pbuilder ubuntu-dev-tools \
           distro-info distro-info-data libdistro-info-perl \
           gnupg curl jq ca-certificates
@@ -77,9 +78,9 @@ runs:
       run: |
         set -eu
         WRAP="$RUNNER_TEMP/gpg-wrapper.sh"
-        cat > "$WRAP" <<'EOS'
+        cat > "$WRAP" <<EOS
         #!/usr/bin/env bash
-        exec gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$@"
+        exec gpg --homedir "${GNUPGHOME}" --batch --pinentry-mode loopback --passphrase "\${GPG_PASSPHRASE}" "\$@"
         EOS
         chmod +x "$WRAP"
         echo "DEBSIGN_PROGRAM=$WRAP" >> "$GITHUB_ENV"
