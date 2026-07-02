@@ -1,0 +1,27 @@
+--- a/debian/control	2026-07-02 16:51:15.042546375 +0800
++++ b/debian/control	2026-07-02 17:12:21.163815485 +0800
+@@ -8,7 +8,7 @@
+  appstream,
+  cmake (>= 3.13),
+  dbus-daemon <!nocheck>,
+- debhelper-compat (= 14),
++ debhelper-compat (= 13),
+  dh-exec,
+  extra-cmake-modules,
+  gettext,
+@@ -42,7 +42,6 @@
+  libxkbfile-dev,
+  libyoga-dev,
+  pkgconf,
+- plasma-wayland-protocols (>= 1.20),
+  unicode-cldr-core,
+  uuid-dev,
+  wayland-protocols [linux-any],
+@@ -119,7 +118,6 @@
+ Multi-Arch: same
+ Depends:
+  fcitx5-data (= ${source:Version}),
+- plasma-wayland-protocols (>= 1.20),
+ Breaks:
+  fcitx5-module-dbus (<< 5.0.4-2),
+  fcitx5-module-emoji (<< 5.0.20),

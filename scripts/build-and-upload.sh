@@ -87,6 +87,18 @@ if [[ -f "$RELAX_MAP" ]]; then
   fi
 fi
 
+# 直接 apply debian-patches/<pkg>/ 里的 patch (修改 debian/ 目录下的文件)
+# 这类 patch 不能加入 quilt series: dpkg-source -b 验证时从 orig tarball 重跑,
+# orig 里没有 debian/ 目录, quilt 会报 "Reversed or previously applied".
+DEB_PATCH_DIR="${GITHUB_WORKSPACE}/debian-patches/${PKG}"
+if [[ -d "$DEB_PATCH_DIR" ]]; then
+  for p in "$DEB_PATCH_DIR"/*.patch; do
+    [[ -f "$p" ]] || continue
+    echo "Applying debian patch $(basename "$p")"
+    patch -p1 < "$p"
+  done
+fi
+
 # 注入 patches/<pkg>/ 里的 patch 文件到 debian/patches/series (quilt 格式)
 # dpkg-source --before-build 会 quilt push -a 应用这些 patch,
 # pbuilder dpkg-source -x 时同理. 不在此处手动 patch -p1 (避免二次 apply).
