@@ -1,0 +1,162 @@
+name: Build and upload to PPA
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ppa-upload
+  cancel-in-progress: false
+
+env:
+  OWNER: ${{ vars.OWNER }}
+  PPA: ${{ vars.PPA }}
+  SERIES: noble
+  DEBEMAIL: ${{ vars.DEBEMAIL }}
+  DEBFULLNAME: ${{ vars.OWNER }}
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  stage1:
+    name: Stage 1 (leaves)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        package: [librime, yoga, fcitx5-gtk]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-ppa-env
+        with:
+          gpg-key-id: ${{ secrets.GPG_KEY_ID }}
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          series: ${{ env.SERIES }}
+          owner: ${{ env.OWNER }}
+          ppa: ${{ env.PPA }}
+      - name: Build and upload
+        id: build
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          chmod +x scripts/*.sh
+          scripts/build-and-upload.sh "${{ matrix.package }}"
+      - name: Wait for Launchpad publish
+        if: steps.build.outputs.uploaded_version != '' && steps.build.outputs.skipped != 'true'
+        env:
+          TIMEOUT_SEC: 7200
+        run: |
+          scripts/wait-for-publish.sh \
+            "$OWNER" "$PPA" "${{ matrix.package }}" \
+            "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
+
+  stage2:
+    name: Stage 2 (fcitx5)
+    needs: stage1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        package: [fcitx5]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-ppa-env
+        with:
+          gpg-key-id: ${{ secrets.GPG_KEY_ID }}
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          series: ${{ env.SERIES }}
+          owner: ${{ env.OWNER }}
+          ppa: ${{ env.PPA }}
+      - name: Build and upload
+        id: build
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          chmod +x scripts/*.sh
+          scripts/build-and-upload.sh "${{ matrix.package }}"
+      - name: Wait for Launchpad publish
+        if: steps.build.outputs.uploaded_version != '' && steps.build.outputs.skipped != 'true'
+        env:
+          TIMEOUT_SEC: 7200
+        run: |
+          scripts/wait-for-publish.sh \
+            "$OWNER" "$PPA" "${{ matrix.package }}" \
+            "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
+
+  stage3:
+    name: Stage 3 (libime, fcitx5-qt, fcitx5-rime)
+    needs: stage2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        package: [libime, fcitx5-qt, fcitx5-rime]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-ppa-env
+        with:
+          gpg-key-id: ${{ secrets.GPG_KEY_ID }}
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          series: ${{ env.SERIES }}
+          owner: ${{ env.OWNER }}
+          ppa: ${{ env.PPA }}
+      - name: Build and upload
+        id: build
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          chmod +x scripts/*.sh
+          scripts/build-and-upload.sh "${{ matrix.package }}"
+      - name: Wait for Launchpad publish
+        if: steps.build.outputs.uploaded_version != '' && steps.build.outputs.skipped != 'true'
+        env:
+          TIMEOUT_SEC: 7200
+        run: |
+          scripts/wait-for-publish.sh \
+            "$OWNER" "$PPA" "${{ matrix.package }}" \
+            "${{ steps.build.outputs.uploaded_version }}" "$SERIES"
+
+  stage4:
+    name: Stage 4 (fcitx5-chinese-addons)
+    needs: stage3
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        package: [fcitx5-chinese-addons]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-ppa-env
+        with:
+          gpg-key-id: ${{ secrets.GPG_KEY_ID }}
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          series: ${{ env.SERIES }}
+          owner: ${{ env.OWNER }}
+          ppa: ${{ env.PPA }}
+      - name: Build and upload
+        id: build
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+        run: |
+          chmod +x scripts/*.sh
+          scripts/build-and-upload.sh "${{ matrix.package }}"
+      - name: Wait for Launchpad publish
+        if: steps.build.outputs.uploaded_version != '' && steps.build.outputs.skipped != 'true'
+        env:
+          TIMEOUT_SEC: 7200
+        run: |
+          scripts/wait-for-publish.sh \
+            "$OWNER" "$PPA" "${{ matrix.package }}" \
+            "${{ steps.build.outputs.uploaded_version }}" "$SERIES"

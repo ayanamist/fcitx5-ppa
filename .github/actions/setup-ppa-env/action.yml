@@ -1,0 +1,143 @@
+name: 'Setup PPA build environment'
+description: 'apt sources, tools, GPG import, pbuilder chroot'
+inputs:
+  gpg-key-id:
+    required: true
+  gpg-private-key:
+    required: true
+  gpg-passphrase:
+    required: true
+  series:
+    required: true
+    default: noble
+  owner:
+    required: true
+  ppa:
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Configure Debian sid deb-src
+      shell: bash
+      run: |
+        set -eux
+        sudo apt-get update
+        sudo apt-get install -y debian-archive-keyring
+        sudo tee /etc/apt/sources.list.d/debian-sid.sources >/dev/null <<'EOF'
+        Types: deb-src
+        URIs: http://deb.debian.org/debian
+        Suites: sid
+        Components: main
+        Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+        EOF
+        sudo tee /etc/apt/preferences.d/99-debian-sid >/dev/null <<'EOF'
+        Package: *
+        Pin: release o=Debian
+        Pin-Priority: -1
+        EOF
+        sudo apt-get update
+
+    - name: Install build/upload tools
+      shell: bash
+      run: |
+        sudo apt-get install -y --no-install-recommends \
+          devscripts dput debhelper dpkg-dev \
+          pbuilder ubuntu-dev-tools \
+          gnupg curl jq ca-certificates
+
+    - name: Import GPG key
+      shell: bash
+      env:
+        GPG_PRIVATE_KEY: ${{ inputs.gpg-private-key }}
+        GPG_KEY_ID: ${{ inputs.gpg-key-id }}
+      run: |
+        set -eu
+        export GNUPGHOME="$RUNNER_TEMP/.gnupg"
+        mkdir -p "$GNUPGHOME"
+        chmod 700 "$GNUPGHOME"
+        echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+        echo "allow-loopback-pinentry" >> "$GNUPGHOME/gpg-agent.conf"
+        echo "pinentry-mode loopback" >> "$GNUPGHOME/gpg.conf"
+        gpgconf --kill gpg-agent
+        gpg --list-secret-keys "$GPG_KEY_ID"
+        echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+        echo "DEBSIGN_KEYID=$GPG_KEY_ID" >> "$GITHUB_ENV"
+
+    - name: Setup GPG wrapper for debsign
+      shell: bash
+      env:
+        GPG_PASSPHRASE: ${{ inputs.gpg-passphrase }}
+      run: |
+        set -eu
+        WRAP="$RUNNER_TEMP/gpg-wrapper.sh"
+        cat > "$WRAP" <<'EOS'
+        #!/usr/bin/env bash
+        exec gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$@"
+        EOS
+        chmod +x "$WRAP"
+        echo "DEBSIGN_PROGRAM=$WRAP" >> "$GITHUB_ENV"
+        echo "GPG_PASSPHRASE=$GPG_PASSPHRASE" >> "$GITHUB_ENV"
+
+    - name: Fetch PPA signing key
+      shell: bash
+      env:
+        OWNER: ${{ inputs.owner }}
+        PPA: ${{ inputs.ppa }}
+      run: |
+        set -eux
+        sudo install -d -m 0755 /etc/apt/keyrings
+        FPR="$(curl -fsSL "https://api.launchpad.net/1.0/~${OWNER}/+archive/ubuntu/${PPA}" | jq -r '.signing_key_fingerprint')"
+        if [[ -z "$FPR" || "$FPR" == "null" ]]; then
+          echo "::error::Cannot get PPA signing key fingerprint (PPA empty or not published yet?)"
+          # PPA首次为空时无signing_key,首轮build需允许untrusted
+          echo "PPA_ALLOW_UNTRUSTED=yes" >> "$GITHUB_ENV"
+          exit 0
+        fi
+        echo "PPA signing key: $FPR"
+        curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${FPR}" \
+          | sudo gpg --dearmor -o /etc/apt/keyrings/ppa-${OWNER}-${PPA}.gpg
+        echo "PPA_KEYRING=/etc/apt/keyrings/ppa-${OWNER}-${PPA}.gpg" >> "$GITHUB_ENV"
+        echo "PPA_ALLOW_UNTRUSTED=no" >> "$GITHUB_ENV"
+
+    - name: Cache pbuilder chroot
+      id: pbuilder-cache
+      uses: actions/cache@v4
+      with:
+        path: /var/cache/pbuilder/base-${{ inputs.series }}.tgz
+        key: pbuilder-${{ inputs.series }}-${{ github.run_id }}
+        restore-keys: |
+          pbuilder-${{ inputs.series }}-
+
+    - name: Create pbuilder chroot if missing
+      shell: bash
+      env:
+        SERIES: ${{ inputs.series }}
+        OWNER: ${{ inputs.owner }}
+        PPA: ${{ inputs.ppa }}
+      run: |
+        set -eux
+        BASE="/var/cache/pbuilder/base-${SERIES}.tgz"
+        # 生成pbuilderrc: 若已拿到PPA key用signed-by,否则允许untrusted(首轮空PPA)
+        if [[ "${PPA_ALLOW_UNTRUSTED:-yes}" == "no" ]]; then
+          KEYRING_LINE="OTHERMIRROR=\"deb [signed-by=${PPA_KEYRING}] http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main\""
+          UNTRUSTED_LINE="ALLOWUNTRUSTED=no"
+          # BINDMOUNTS让chroot访问keyring
+          BINDMOUNTS_LINE="BINDMOUNTS=\"${PPA_KEYRING%/*}\""
+        else
+          KEYRING_LINE="OTHERMIRROR=\"deb http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main\""
+          UNTRUSTED_LINE="ALLOWUNTRUSTED=yes"
+          BINDMOUNTS_LINE=""
+        fi
+        sudo tee /etc/pbuilderrc >/dev/null <<EOF
+        DISTRIBUTION=${SERIES}
+        COMPONENTS="main universe"
+        MIRRORSITE=http://archive.ubuntu.com/ubuntu
+        ${KEYRING_LINE}
+        ${UNTRUSTED_LINE}
+        ${BINDMOUNTS_LINE}
+        EOF
+        if [[ ! -f "$BASE" ]]; then
+          sudo pbuilder create --distribution "$SERIES" --basetgz "$BASE"
+        else
+          echo "reuse cached chroot: $BASE"
+        fi
