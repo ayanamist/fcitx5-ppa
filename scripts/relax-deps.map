@@ -1,5 +1,8 @@
-# 版本约束放宽表: <package> <build-dep-package-to-relax> ...
-# 用于 fcitx5-ppa: sid 版本约束里 build-dep 版本超出 noble 已有,
-# 若 API 兼容可放宽约束(去掉版本约束, 保留包名) 让 noble 里旧版本能满足.
-# 只放宽已知安全项. 若放宽后编译失败说明 API 真变了, 需其他方案.
+# 版本约束放宽表: <package> <spec> ...
+# spec 语法:
+#   name         — 删所有版本约束 (>= X) / (<< X) / (= X)
+#   name=VER     — 强制把版本约束改成 (= VER) (适合 debhelper-compat 这种精确匹配虚拟包)
+# 用于 fcitx5-ppa: sid 里 build-dep 版本超 noble 已有, API 兼容时降级.
 librime libmarisa-dev libopencc-dev libutfcpp-dev libyaml-cpp-dev
+fcitx5 debhelper-compat=13
+fcitx5-chinese-addons debhelper-compat=13

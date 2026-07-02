@@ -61,18 +61,27 @@ fi
 NEW_VERSION="${EXPECTED_PREFIX}${NEW_N}"
 echo "Target PPA version: ${NEW_VERSION}"
 
-# 放宽 build-dep 版本约束: sid 里 (>= X) / (>> X) 若 X 高于 noble,
-# 且 API 兼容, 用 sed 去掉版本约束. 表在 scripts/relax-deps.map
+# 放宽 build-dep 版本约束: sid 里 (>= X) / (>> X) / (= X) 若 X 高于 noble,
+# 且 API 兼容, 用 perl 改写 debian/control. 表在 scripts/relax-deps.map
+# spec 语法: name        — 删版本约束
+#            name=VER    — 改成 (= VER)
 RELAX_MAP="${GITHUB_WORKSPACE}/scripts/relax-deps.map"
 if [[ -f "$RELAX_MAP" ]]; then
   RELAX_LIST="$(awk -v p="$PKG" '$1==p {$1=""; sub(/^ /,""); print; exit}' "$RELAX_MAP")"
   if [[ -n "$RELAX_LIST" ]]; then
     echo "::group::relax build-deps: ${RELAX_LIST}"
-    for dep in $RELAX_LIST; do
-      # 匹配 "<dep> (op version)" 保留包名去掉括号约束.
-      # 用 perl 更稳(处理 alt "|", 多行, 空白)
-      perl -i -pe "s/\Q${dep}\E\s*\([^)]*\)/${dep}/g" debian/control
-      echo "  relaxed: ${dep}"
+    for spec in $RELAX_LIST; do
+      if [[ "$spec" == *"="* ]]; then
+        dep="${spec%%=*}"
+        newver="${spec#*=}"
+        # "<dep> (op X)" -> "<dep> (= newver)"
+        perl -i -pe "s/\Q${dep}\E\s*\([^)]*\)/${dep} (= ${newver})/g" debian/control
+        echo "  rewrote: ${dep} → (= ${newver})"
+      else
+        # "<dep> (op X)" -> "<dep>"
+        perl -i -pe "s/\Q${spec}\E\s*\([^)]*\)/${spec}/g" debian/control
+        echo "  relaxed: ${spec}"
+      fi
     done
     echo "::endgroup::"
   fi
@@ -121,10 +130,11 @@ if [[ -f "$DEPS_MAP" ]]; then
   fi
 fi
 
-# 生成 pbuilder D-hook: 装完 build-dep 后校验 -dev 版本
+# 生成 pbuilder A-hook: 装完 build-dep 后 (build 前) 校验 -dev 版本
+# (D-hook 在 build-dep 装之前触发, dpkg-query 全空 → 校验失效)
 HOOKDIR="$WORKDIR/pbuilder-hooks"
 mkdir -p "$HOOKDIR"
-HOOK="$HOOKDIR/D50verify-deps"
+HOOK="$HOOKDIR/A50verify-deps"
 {
   cat <<'HDR'
 #!/bin/bash
