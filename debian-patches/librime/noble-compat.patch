@@ -1,0 +1,18 @@
+--- a/debian/control	2026-07-02 17:32:58.566513284 +0800
++++ b/debian/control	2026-07-02 17:33:17.734556457 +0800
+@@ -21,11 +21,11 @@
+  libgoogle-glog-dev,
+  libleveldb-dev,
+  liblua5.4-dev,
+- libmarisa-dev (>> 0.3),
+- libopencc-dev (>= 1.1.9+ds1-3~),
+- libutfcpp-dev (>= 3.2.4),
++ libmarisa-dev,
++ libopencc-dev,
++ libutfcpp-dev,
+  libxcb-keysyms1-dev,
+- libyaml-cpp-dev (>= 0.6.3-7~),
++ libyaml-cpp-dev,
+  pkgconf,
+  x11proto-core-dev,
+  zlib1g-dev,
