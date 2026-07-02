@@ -65,8 +65,8 @@ dch --force-distribution --force-bad-version \
     -D "$SERIES" \
     "Automated rebuild for ${SERIES} PPA (from Debian sid ${DEB_VERSION})."
 
-# 1) 生成源码包(签名)
-debuild -S -sa -k"${GPG_KEY_ID}"
+# 1) 生成源码包(签名). -d 跳过 build-dep 检查(host 不装依赖,pbuilder 里才装)
+debuild -S -sa -d -k"${GPG_KEY_ID}"
 
 cd ..
 UPLOAD_VERSION_NOEPOCH="${NEW_VERSION#*:}"

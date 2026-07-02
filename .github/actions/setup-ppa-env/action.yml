@@ -2,17 +2,23 @@ name: 'Setup PPA build environment'
 description: 'apt sources, tools, GPG import, pbuilder chroot'
 inputs:
   gpg-key-id:
+    description: 'GPG key ID for debsign'
     required: true
   gpg-private-key:
+    description: 'ASCII armored GPG private key'
     required: true
   gpg-passphrase:
+    description: 'GPG private key passphrase'
     required: true
   series:
+    description: 'Ubuntu series (noble, jammy, ...)'
     required: true
     default: noble
   owner:
+    description: 'Launchpad account owning the PPA'
     required: true
   ppa:
+    description: 'PPA name'
     required: true
 runs:
   using: composite
@@ -43,6 +49,7 @@ runs:
         sudo apt-get install -y --no-install-recommends \
           devscripts dput debhelper dpkg-dev \
           pbuilder ubuntu-dev-tools \
+          distro-info distro-info-data libdistro-info-perl \
           gnupg curl jq ca-certificates
 
     - name: Import GPG key
