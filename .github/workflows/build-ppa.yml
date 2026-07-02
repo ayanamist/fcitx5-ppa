@@ -58,9 +58,9 @@ jobs:
         id: build
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-          DEB_CACHE_DIR: ${{ runner.home }}/deb-cache/${{ matrix.package }}
         run: |
           chmod +x scripts/*.sh
+          export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
           scripts/build-and-upload.sh "${{ matrix.package }}"
 
   stage2:
@@ -125,9 +125,9 @@ jobs:
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
           LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
-          DEB_CACHE_DIR: ${{ runner.home }}/deb-cache/${{ matrix.package }}
         run: |
           chmod +x scripts/*.sh
+          export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
           scripts/build-and-upload.sh "${{ matrix.package }}"
 
   stage3:
@@ -200,9 +200,9 @@ jobs:
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
           LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
-          DEB_CACHE_DIR: ${{ runner.home }}/deb-cache/${{ matrix.package }}
         run: |
           chmod +x scripts/*.sh
+          export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
           scripts/build-and-upload.sh "${{ matrix.package }}"
 
   stage4:
@@ -299,7 +299,7 @@ jobs:
         env:
           GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
           LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
-          DEB_CACHE_DIR: ${{ runner.home }}/deb-cache/${{ matrix.package }}
         run: |
           chmod +x scripts/*.sh
+          export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
           scripts/build-and-upload.sh "${{ matrix.package }}"
