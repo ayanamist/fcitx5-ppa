@@ -12,6 +12,8 @@ SERIES="$5"
 
 TIMEOUT_SEC="${TIMEOUT_SEC:-7200}"
 POLL_INTERVAL="${POLL_INTERVAL:-60}"
+# 上传后若 SOURCE_VISIBLE_DEADLINE 秒仍未出现在 PPA, 视为 Launchpad 拒收 (通常拒收邮件已发)
+SOURCE_VISIBLE_DEADLINE="${SOURCE_VISIBLE_DEADLINE:-900}"
 
 DIST_URL="https://api.launchpad.net/1.0/ubuntu/${SERIES}"
 ARCHIVE_URL="https://api.launchpad.net/1.0/~${OWNER}/+archive/ubuntu/${PPA}"
@@ -41,6 +43,11 @@ while true; do
   entries="$(echo "$src_json" | jq '.entries | length')"
 
   if [[ "$entries" == "0" ]]; then
+    if (( elapsed > SOURCE_VISIBLE_DEADLINE )); then
+      echo "::error::${PKG} ${VERSION} not visible in PPA after ${elapsed}s (>${SOURCE_VISIBLE_DEADLINE}s deadline)."
+      echo "::error::Likely rejected by Launchpad. Check email/logs at https://launchpad.net/~${OWNER}/+archive/ubuntu/${PPA}/+packages"
+      exit 1
+    fi
     echo "[${elapsed}s] source not yet visible; wait ${POLL_INTERVAL}s"
     sleep "$POLL_INTERVAL"
     continue

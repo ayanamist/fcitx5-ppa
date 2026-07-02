@@ -36,23 +36,26 @@ echo "PPA current version: ${PPA_VER:-none}"
 BASE_SUFFIX="~${SERIES}1~ppa"
 EXPECTED_PREFIX="${DEB_VERSION}${BASE_SUFFIX}"
 
-NEW_N=1
+# 若 PPA 已发布版本 >= 期望首个 (~ppa1),说明 upstream 未涨或涨得更慢, 跳过
 if [[ -n "$PPA_VER" ]]; then
-  if [[ "$PPA_VER" == "${EXPECTED_PREFIX}"* ]]; then
-    N="${PPA_VER##"${EXPECTED_PREFIX}"}"
-    if [[ "$N" =~ ^[0-9]+$ ]]; then
-      NEW_N=$((N + 1))
+  if dpkg --compare-versions "$PPA_VER" ge "${EXPECTED_PREFIX}1"; then
+    echo "::notice::PPA has version ${PPA_VER} >= ${EXPECTED_PREFIX}1; skip."
+    if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+      echo "uploaded_version=" >> "$GITHUB_OUTPUT"
+      echo "skipped=true" >> "$GITHUB_OUTPUT"
     fi
-  else
-    if dpkg --compare-versions "$PPA_VER" ge "${EXPECTED_PREFIX}1"; then
-      echo "::notice::PPA has newer/equal version (${PPA_VER}); skip."
-      if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-        echo "uploaded_version=" >> "$GITHUB_OUTPUT"
-        echo "skipped=true" >> "$GITHUB_OUTPUT"
-      fi
-      exit 0
-    fi
+    exit 0
   fi
+fi
+
+# 查历史所有匹配 <DEB_VERSION>~noble1~ppaN 的最大 N (含已 superseded/deleted)
+# Launchpad 拒收重复文件名, 即使 obsolete 也不许再传
+MAX_HIST_N="$("${GITHUB_WORKSPACE}/scripts/get-max-ppa-n.sh" "$OWNER" "$PPA" "$PKG" "$SERIES" "$DEB_VERSION" || true)"
+echo "PPA historical max ~ppaN for ${DEB_VERSION}: ${MAX_HIST_N:-none}"
+
+NEW_N=1
+if [[ -n "$MAX_HIST_N" ]]; then
+  NEW_N=$((MAX_HIST_N + 1))
 fi
 
 NEW_VERSION="${EXPECTED_PREFIX}${NEW_N}"

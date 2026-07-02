@@ -79,6 +79,8 @@ runs:
         gpgconf --kill gpg-agent 2>/dev/null || true
         # 导入私钥,--pinentry-mode loopback 保 agent 不弹 tty
         echo "$GPG_PRIVATE_KEY" | gpg --batch --pinentry-mode loopback --import
+        # 设置 ultimate trust (dput python-gpg verify 需要至少 marginal trust)
+        echo "$GPG_KEY_ID:6:" | gpg --batch --import-ownertrust
         # 预热 passphrase 到 agent (让后续 debsign 直接命中 cache)
         echo "test" | gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
           --local-user "$GPG_KEY_ID" -as -o /dev/null || echo "::warning::passphrase warm-up failed"
