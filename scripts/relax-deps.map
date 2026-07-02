@@ -1,7 +1,0 @@
-# 版本约束放宽表: <package> <spec> ...
-# spec 语法:
-#   name         — 删所有版本约束 (>= X) / (<< X) / (= X)
-#   name=VER     — 强制把版本约束改成 (= VER) (适合 debhelper-compat 这种精确匹配虚拟包)
-# 用于 fcitx5-ppa: sid 里 build-dep 版本超 noble 已有, API 兼容时降级.
-# 注: debian/control 里的修改用 debian-patches/<pkg>/noble-compat.patch 管理.
-

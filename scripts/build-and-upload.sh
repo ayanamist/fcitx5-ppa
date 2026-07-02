@@ -61,32 +61,6 @@ fi
 NEW_VERSION="${EXPECTED_PREFIX}${NEW_N}"
 echo "Target PPA version: ${NEW_VERSION}"
 
-# 放宽 build-dep 版本约束: sid 里 (>= X) / (>> X) / (= X) 若 X 高于 noble,
-# 且 API 兼容, 用 perl 改写 debian/control. 表在 scripts/relax-deps.map
-# spec 语法: name        — 删版本约束
-#            name=VER    — 改成 (= VER)
-RELAX_MAP="${GITHUB_WORKSPACE}/scripts/relax-deps.map"
-if [[ -f "$RELAX_MAP" ]]; then
-  RELAX_LIST="$(awk -v p="$PKG" '$1==p {$1=""; sub(/^ /,""); print; exit}' "$RELAX_MAP")"
-  if [[ -n "$RELAX_LIST" ]]; then
-    echo "::group::relax build-deps: ${RELAX_LIST}"
-    for spec in $RELAX_LIST; do
-      if [[ "$spec" == *"="* ]]; then
-        dep="${spec%%=*}"
-        newver="${spec#*=}"
-        # "<dep> (op X)" -> "<dep> (= newver)"
-        perl -i -pe "s/\Q${dep}\E\s*\([^)]*\)/${dep} (= ${newver})/g" debian/control
-        echo "  rewrote: ${dep} → (= ${newver})"
-      else
-        # "<dep> (op X)" -> "<dep>"
-        perl -i -pe "s/\Q${spec}\E\s*\([^)]*\)/${spec}/g" debian/control
-        echo "  relaxed: ${spec}"
-      fi
-    done
-    echo "::endgroup::"
-  fi
-fi
-
 # 直接 apply debian-patches/<pkg>/ 里的 patch (修改 debian/ 目录下的文件)
 # 这类 patch 不能加入 quilt series: dpkg-source -b 验证时从 orig tarball 重跑,
 # orig 里没有 debian/ 目录, quilt 会报 "Reversed or previously applied".
