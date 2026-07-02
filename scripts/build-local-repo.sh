@@ -7,7 +7,7 @@ set -euo pipefail
 SRC="$1"
 DST="$2"
 
-mkdir -p "$DST"
+mkdir -p "$SRC" "$DST"
 # 收集所有 .deb 到 $DST
 find "$SRC" -type f -name '*.deb' -exec cp -v {} "$DST/" \;
 
