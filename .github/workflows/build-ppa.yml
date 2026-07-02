@@ -30,7 +30,6 @@ jobs:
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         package: [librime, yoga, fcitx5-gtk]
     steps:
@@ -76,7 +75,6 @@ jobs:
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         package: [fcitx5]
     steps:
@@ -133,7 +131,6 @@ jobs:
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         package: [libime, fcitx5-qt, fcitx5-rime]
     steps:
@@ -190,7 +187,6 @@ jobs:
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         package: [fcitx5-chinese-addons]
     steps:
