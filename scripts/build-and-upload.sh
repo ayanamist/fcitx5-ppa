@@ -87,6 +87,20 @@ if [[ -f "$RELAX_MAP" ]]; then
   fi
 fi
 
+# 注入 patches/<pkg>/ 里的 patch 文件到 debian/patches/series (quilt 格式)
+# dpkg-source --before-build 会 quilt push -a 应用这些 patch,
+# pbuilder dpkg-source -x 时同理. 不在此处手动 patch -p1 (避免二次 apply).
+PATCH_DIR="${GITHUB_WORKSPACE}/patches/${PKG}"
+if [[ -d "$PATCH_DIR" ]]; then
+  for p in "$PATCH_DIR"/*.patch; do
+    [[ -f "$p" ]] || continue
+    echo "Injecting patch $(basename "$p") into debian/patches"
+    mkdir -p debian/patches
+    cp "$p" debian/patches/
+    basename "$p" >> debian/patches/series
+  done
+fi
+
 export DEBEMAIL="${DEBEMAIL:?}"
 export DEBFULLNAME="${DEBFULLNAME:?}"
 dch --force-distribution --allow-lower-version '.*' \
