@@ -88,5 +88,4 @@ Actions → "Build and upload to PPA" → Run workflow.
 .github/actions/setup-ppa-env/        # composite action: apt/gpg/pbuilder
 scripts/build-and-upload.sh           # 单包: 拉源→pbuilder→dput
 scripts/get-ppa-version.sh            # 查 PPA 已发布最新版本
-scripts/wait-for-publish.sh           # 轮询 Launchpad Published
 ```
