@@ -1,5 +1,5 @@
---- a/debian/control	2026-07-02 18:13:38.899957782 +0800
-+++ b/debian/control	2026-07-02 18:13:46.155983400 +0800
+--- a/debian/control	2026-07-03 09:22:07.175399703 +0800
++++ b/debian/control	2026-07-03 09:22:08.043402228 +0800
 @@ -7,7 +7,7 @@
  Build-Depends:
   appstream,
@@ -18,3 +18,111 @@
   pkgconf,
   qt6-base-dev,
   qt6-webengine-dev [amd64 arm64 armhf i386 mips64el],
+@@ -63,6 +63,8 @@
+ Architecture: any
+ Depends:
+  fcitx5-chinese-addons-data,
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: Chinese-related addon for fcitx5 (binary tools)
+  For Chinese fcitx5 users, fcitx5-chinese-addons provides Chinese-specific
+  pinyin and table input method support.
+@@ -86,6 +88,8 @@
+ Multi-Arch: same
+ Depends:
+  fcitx5-chinese-addons-data,
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Conflicts:
+  fcitx-data,
+ Description: Fcitx Input Method Framework v5 (chttrans module)
+@@ -107,6 +111,8 @@
+ Multi-Arch: same
+ Depends:
+  fcitx5-chinese-addons-data,
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: Fcitx Input Method Framework v5 (cloudpinyin module)
+  Fcitx5 is the next generation of fcitx input method framework. It
+  provides pleasant and modern input experience with intuitive graphical
+@@ -128,6 +134,8 @@
+ Multi-Arch: same
+ Depends:
+  fcitx5-module-cloudpinyin (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: Development files for fcitx5 cloudpinyin module
+  Fcitx5 is the next generation of fcitx input method framework. It
+  provides pleasant and modern input experience with intuitive graphical
+@@ -148,6 +156,8 @@
+ Multi-Arch: same
+ Depends:
+  fcitx5-chinese-addons-data,
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Conflicts:
+  fcitx-data,
+ Description: Fcitx Input Method Framework v5 (fullwidth module)
+@@ -171,6 +181,8 @@
+ Depends:
+  fcitx5-chinese-addons-data,
+  fcitx5-pinyin (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: Fcitx Input Method Framework v5 (pinyinhelper module)
+  Fcitx5 is the next generation of fcitx input method framework. It
+  provides pleasant and modern input experience with intuitive graphical
+@@ -192,6 +204,8 @@
+ Multi-Arch: same
+ Depends:
+  fcitx5-module-pinyinhelper (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: Development files for fcitx5 pinyinhelper module
+  Fcitx5 is the next generation of fcitx input method framework. It
+  provides pleasant and modern input experience with intuitive graphical
+@@ -212,6 +226,8 @@
+ Multi-Arch: same
+ Depends:
+  fcitx5-chinese-addons-data,
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Conflicts:
+  fcitx-data,
+ Description: Fcitx Input Method Framework v5 (punctuation module)
+@@ -235,6 +251,8 @@
+ Multi-Arch: same
+ Depends:
+  fcitx5-module-punctuation (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: Development files for fcitx5 punctuation module
+  Fcitx5 is the next generation of fcitx input method framework. It
+  provides pleasant and modern input experience with intuitive graphical
+@@ -257,6 +275,8 @@
+  fcitx5,
+  fcitx5-chinese-addons-data,
+  fcitx5-module-punctuation (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Recommends:
+  fcitx5-module-chttrans (= ${binary:Version}),
+  fcitx5-module-cloudpinyin (= ${binary:Version}),
+@@ -288,6 +308,8 @@
+ Multi-Arch: same
+ Depends:
+  fcitx5-pinyin (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Breaks:
+  fcitx5-pinyin (<< 5.1.0),
+ Replaces:
+@@ -318,6 +340,8 @@
+  fcitx5-chinese-addons-data,
+  fcitx5-module-pinyinhelper (= ${binary:Version}),
+  fcitx5-module-punctuation (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Recommends:
+  fcitx5-module-fullwidth (= ${binary:Version}),
+  fcitx5-module-quickphrase,

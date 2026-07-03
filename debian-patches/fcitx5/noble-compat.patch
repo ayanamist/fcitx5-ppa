@@ -1,5 +1,5 @@
---- a/debian/control	2026-07-02 16:51:15.042546375 +0800
-+++ b/debian/control	2026-07-02 17:12:21.163815485 +0800
+--- a/debian/control	2026-07-03 09:22:06.307397173 +0800
++++ b/debian/control	2026-07-03 09:22:08.023402170 +0800
 @@ -8,7 +8,7 @@
   appstream,
   cmake (>= 3.13),
@@ -17,11 +17,82 @@
   unicode-cldr-core,
   uuid-dev,
   wayland-protocols [linux-any],
-@@ -119,7 +118,6 @@
+@@ -70,6 +69,8 @@
+  libfcitx5config6 (= ${binary:Version}),
+  libfcitx5core7 (= ${binary:Version}),
+  libfcitx5utils2 (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Recommends:
+  fcitx5-config-qt,
+  fcitx5-frontend-all,
+@@ -119,7 +120,8 @@
  Multi-Arch: same
  Depends:
   fcitx5-data (= ${source:Version}),
 - plasma-wayland-protocols (>= 1.20),
++ ${shlibs:Depends},
++ ${misc:Depends},
  Breaks:
   fcitx5-module-dbus (<< 5.0.4-2),
   fcitx5-module-emoji (<< 5.0.20),
+@@ -160,6 +162,8 @@
+  fcitx5-modules (= ${binary:Version}),
+  libfcitx5core-dev (= ${binary:Version}),
+  libfcitx5utils-dev (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: ${source:Synopsis} (input modules dev files)
+  ${source:Extended-Description}
+  .
+@@ -171,6 +175,8 @@
+ Section: libdevel
+ Depends:
+  libfcitx5config6 (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: ${source:Synopsis} (config library dev files)
+  ${source:Extended-Description}
+  .
+@@ -180,6 +186,7 @@
+ Architecture: any
+ Section: libs
+ Multi-Arch: same
++Depends: ${shlibs:Depends}, ${misc:Depends}
+ Description: ${source:Synopsis} (config library)
+  ${source:Extended-Description}
+  .
+@@ -193,6 +200,8 @@
+  libfcitx5config-dev (= ${binary:Version}),
+  libfcitx5core7 (= ${binary:Version}),
+  libfcitx5utils-dev (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: ${source:Synopsis} (core library dev files)
+  ${source:Extended-Description}
+  .
+@@ -202,6 +211,7 @@
+ Architecture: any
+ Section: libs
+ Multi-Arch: same
++Depends: ${shlibs:Depends}, ${misc:Depends}
+ Description: ${source:Synopsis} (core library)
+  ${source:Extended-Description}
+  .
+@@ -213,6 +223,8 @@
+ Section: libdevel
+ Depends:
+  libfcitx5utils2 (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: ${source:Synopsis} (utils library dev files)
+  ${source:Extended-Description}
+  .
+@@ -222,6 +234,7 @@
+ Architecture: any
+ Section: libs
+ Multi-Arch: same
++Depends: ${shlibs:Depends}, ${misc:Depends}
+ Description: ${source:Synopsis} (utils library)
+  ${source:Extended-Description}
+  .

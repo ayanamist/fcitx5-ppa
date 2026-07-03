@@ -1,5 +1,5 @@
---- a/debian/control	2026-07-02 19:46:46.635292784 +0800
-+++ b/debian/control	2026-07-02 19:46:46.643292798 +0800
+--- a/debian/control	2026-07-03 09:22:08.003402112 +0800
++++ b/debian/control	2026-07-03 09:22:08.063402286 +0800
 @@ -7,7 +7,7 @@
  Build-Depends:
   appstream,
@@ -9,3 +9,21 @@
   extra-cmake-modules,
   fcitx5-modules-dev (>= 5.1.14-4~),
   gettext,
+@@ -25,6 +25,8 @@
+ Depends:
+  fcitx5-module-lua-common (= ${source:Version}),
+  liblua5.3-0,
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: Lua support for fcitx5
+  Fcitx5 is the next generation of fcitx input method framework. It
+  provides pleasant and modern input experience with intuitive graphical
+@@ -63,6 +65,8 @@
+ Section: libdevel
+ Depends:
+  fcitx5-module-lua (= ${binary:Version}),
++ ${shlibs:Depends},
++ ${misc:Depends},
+ Description: Lua support for fcitx5 (development files)
+  Fcitx5 is the next generation of fcitx input method framework. It
+  provides pleasant and modern input experience with intuitive graphical
