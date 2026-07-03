@@ -17,8 +17,7 @@ curl -fsSL --get \
   --data-urlencode "source_name=${PKG}" \
   --data-urlencode "exact_match=true" \
   --data-urlencode "distro_series=${DIST_URL}" \
-  --data-urlencode "status=Published" \
   --data-urlencode "order_by_date=true" \
   "${ARCHIVE_URL}" \
-  | jq -r '.entries[]?.source_package_version' \
+  | jq -r '.entries[] | select(.status | IN("Published","Pending")) | .source_package_version' \
   | head -n1
