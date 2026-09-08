@@ -14,7 +14,7 @@ class PreuploadCheckTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             entries = [] if status is None else [{
-                'source_package_version': VERSION, 'status': status,
+                'source_package_version': VERSION, 'status': status, 'self_link': 'https://fixture/source',
                 'distro_series_link': 'https://api.launchpad.net/1.0/ubuntu/noble'}]
             (root / 'response').write_text(json.dumps({'entries': entries}))
             mocks = {
@@ -22,6 +22,7 @@ class PreuploadCheckTest(unittest.TestCase):
                 'dpkg-parsechangelog': 'echo 5.1.15-1',
                 'curl': '''
 case "$*" in *'Cache-Control: no-cache'*) ;; *) touch "$FIXTURE/missing-header";; esac
+case "$*" in *getBuilds*) echo '{"entries": [{"buildstate": "Successfully built"}]}'; exit 0;; esac
 if [ -f "$FIXTURE/built" ]; then
   if [ "$FAIL_QUERY" = yes ]; then exit 22; fi
   cat "$FIXTURE/response"

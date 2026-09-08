@@ -30,31 +30,37 @@ cd "$SRCDIR"
 DEB_VERSION="$(dpkg-parsechangelog -SVersion)"
 echo "Debian source version: ${DEB_VERSION}"
 
-PPA_VER="$("${GITHUB_WORKSPACE}/scripts/get-ppa-version.sh" "$OWNER" "$PPA" "$PKG" "$SERIES")"
-echo "PPA current version: ${PPA_VER:-none}"
-
 BASE_SUFFIX="~${SERIES}1~ppa"
 EXPECTED_PREFIX="${DEB_VERSION}${BASE_SUFFIX}"
-
-# 历史查询可能比当前版本查询更新；先复核有效版本，再决定是否递增。
-# 同时保留 Deleted 等记录的最大 N，避免重复使用 Launchpad 已占用文件名。
-HISTORY="$("${GITHUB_WORKSPACE}/scripts/get-max-ppa-n.sh" "$OWNER" "$PPA" "$PKG" "$SERIES" "$DEB_VERSION" --json)"
+HISTORY="$(python3 "${GITHUB_WORKSPACE}/scripts/ppa-state.py" "$OWNER" "$PPA" "$PKG" "$SERIES" "$DEB_VERSION")"
 MAX_HIST_N="$(jq -r '.max_n' <<< "$HISTORY")"
-ACTIVE_VERSION="$(jq -r '.active_version' <<< "$HISTORY")"
-echo "PPA historical max ~ppaN for ${DEB_VERSION}: ${MAX_HIST_N:-none}"
-if [[ -n "$ACTIVE_VERSION" ]] && { [[ -z "$PPA_VER" ]] || dpkg --compare-versions "$ACTIVE_VERSION" gt "$PPA_VER"; }; then
-  PPA_VER="$ACTIVE_VERSION"
-  echo "PPA active version from history: ${PPA_VER}"
+PPA_VER="$(jq -r '.active_version' <<< "$HISTORY")"
+PPA_STATE="$(jq -r '.state' <<< "$HISTORY")"
+echo "PPA state: ${PPA_STATE}; version: ${PPA_VER:-none}"
+if [[ "$PPA_STATE" == "unknown" ]]; then
+  echo "::error::PPA state is unknown; refusing to allocate a new revision."
+  exit 1
 fi
 
 # 若 PPA 已发布版本 >= 期望首个 (~ppa1),说明 upstream 未涨或涨得更慢
-# 但若 DEB_CACHE_DIR 里已有该版本 deb, 直接跳过 (无需重编)
+# 完整本地缓存优先，其次下载 Launchpad 已成功构建的 deb。
 # 若 cache 缺失, 仍需跑 pbuilder 补 cache, 但跳过 dput
 SKIP_UPLOAD=false
 if [[ -n "$PPA_VER" ]]; then
   if dpkg --compare-versions "$PPA_VER" ge "${EXPECTED_PREFIX}1"; then
     CACHE_DIR="${DEB_CACHE_DIR:-}"
-    if [[ -n "$CACHE_DIR" ]] && ls "$CACHE_DIR"/*.deb >/dev/null 2>&1; then
+    CACHE_READY=false
+    if [[ -n "$CACHE_DIR" ]]; then
+      CACHE_STATUS=0
+      python3 "${GITHUB_WORKSPACE}/scripts/deb-cache.py" restore "$PKG" "$PPA_VER" \
+        "$(dpkg --print-architecture)" "$CACHE_DIR" <<< "$HISTORY" || CACHE_STATUS=$?
+      case "$CACHE_STATUS" in
+        0) CACHE_READY=true ;;
+        3) ;; # Launchpad 尚无可用产物，回退同版本本地构建。
+        *) exit "$CACHE_STATUS" ;;
+      esac
+    fi
+    if [[ "$CACHE_READY" == "true" ]]; then
       echo "::notice::PPA has ${PPA_VER} >= ${EXPECTED_PREFIX}1 and cache hit; skip."
       if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
         echo "uploaded_version=" >> "$GITHUB_OUTPUT"
@@ -230,6 +236,10 @@ ls -la "$BUILDRESULT"
 # 若 DEB_CACHE_DIR 设置了, copy binary deb 到 cache 目录供跨 run 复用
 if [[ -n "${DEB_CACHE_DIR:-}" ]]; then
   mkdir -p "$DEB_CACHE_DIR"
+  python3 "${GITHUB_WORKSPACE}/scripts/deb-cache.py" record "$PKG" "$NEW_VERSION" \
+    "$(dpkg --print-architecture)" "$BUILDRESULT"
+  find "$DEB_CACHE_DIR" -maxdepth 1 -name '*.deb' -delete
+  cp "$BUILDRESULT/.manifest.json" "$DEB_CACHE_DIR/"
   find "$BUILDRESULT" -name '*.deb' -exec cp -v {} "$DEB_CACHE_DIR/" \;
 fi
 
@@ -250,7 +260,12 @@ fi
 # 4) 上传源码包到 PPA
 # 构建期间可能已有相同 upstream 版本被接收；重新验证缓存并复查历史。
 if [[ "$SKIP_UPLOAD" != "true" ]]; then
-  FINAL_HISTORY="$("${GITHUB_WORKSPACE}/scripts/get-max-ppa-n.sh" "$OWNER" "$PPA" "$PKG" "$SERIES" "$DEB_VERSION" --json)"
+  FINAL_HISTORY="$(python3 "${GITHUB_WORKSPACE}/scripts/ppa-state.py" "$OWNER" "$PPA" "$PKG" "$SERIES" "$DEB_VERSION")"
+  FINAL_STATE="$(jq -r '.state' <<< "$FINAL_HISTORY")"
+  if [[ "$FINAL_STATE" == "unknown" ]]; then
+    echo "::error::Pre-upload PPA state is unknown; refusing upload."
+    exit 1
+  fi
   FINAL_ACTIVE="$(jq -r '.active_version' <<< "$FINAL_HISTORY")"
   FINAL_MAX_N="$(jq -r '.max_n' <<< "$FINAL_HISTORY")"
   if [[ -n "$FINAL_ACTIVE" ]]; then

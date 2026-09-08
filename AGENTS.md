@@ -181,6 +181,8 @@ debian-patches/<pkg>/*.patch          # debian/ 目录 patch (debian/control 等
 
 ## AI 协作规范
 
+**修改后测试**：修改 `scripts/`、打包 patch、workflow 或测试代码后，交付或 commit 前必须在仓库根目录运行 `bash scripts/test.sh`，全部通过后才能宣告完成。行为变更需同步补充或更新回归测试，覆盖版本幂等、失败重试、缓存完整性和上传判定中受影响的场景；测试失败必须修复，不能通过删除或弱化断言绕过。依赖缺失时先安装测试所需的 `python3-yaml`、`apt-utils`、`jq` 和 `dpkg-dev`；无法运行时明确报告阻塞，不能声称通过。测试在开发修改后本地执行。
+
 **Commit 不 push**: 没有显式说 "push" / "推上去" / "上传" 时, commit 完不 push, 不询问. 用户想 push 前手动 review.
 
 **Patch 生成流程** (禁止手写):
