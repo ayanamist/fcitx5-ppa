@@ -44,6 +44,40 @@ class DebCacheTest(unittest.TestCase):
         return CACHE.restore(self.cache, 'test', VERSION, 'amd64',
                              [self.build] if builds is None else builds)
 
+    def plugin_deb(self, source, version='1.0~git20240319-1~noble1~ppa1', arch='amd64'):
+        package = self.root / 'plugin'
+        (package / 'DEBIAN').mkdir(parents=True, exist_ok=True)
+        (package / 'DEBIAN/control').write_text(
+            f'Package: test-plugin\nSource: {source}\nVersion: {version}\nArchitecture: {arch}\n'
+            'Maintainer: Test <test@example.org>\nDescription: plugin fixture\n')
+        output = self.root / f'test-plugin_{version}_{arch}.deb'
+        subprocess.run(['dpkg-deb', '--build', str(package), str(output)], check=True, capture_output=True)
+        return output
+
+    def test_independent_binary_version_restores_and_reuses_cache(self):
+        output = self.plugin_deb(f'test ({VERSION})')
+        data = output.read_bytes()
+        self.files[output.name] = data
+        self.changes += f' {hashlib.sha256(data).hexdigest()} {len(data)} {output.name}\n'
+        with patch.object(CACHE, 'fetch', side_effect=self.fetch):
+            self.assertTrue(self.restore())
+        with patch.object(CACHE, 'fetch', side_effect=AssertionError('network used')):
+            self.assertTrue(self.restore([]))
+        subprocess.run(['python3', str(ROOT / 'scripts/deb-cache.py'), 'record',
+                        'test', VERSION, 'amd64', str(self.cache)], check=True, capture_output=True)
+        self.assertEqual(len(list(self.cache.glob('*.deb'))), 3)
+
+    def test_explicit_source_version_must_match_even_if_binary_version_matches(self):
+        for source, binary_version, arch in [
+                ('test (2.0-1)', VERSION, 'amd64'),
+                (f'wrong ({VERSION})', VERSION, 'amd64'),
+                ('test', '1.0~git20240319-1~noble1~ppa1', 'amd64'),
+                (f'test ({VERSION})', VERSION, 'arm64')]:
+            with self.subTest(source=source, arch=arch):
+                output = self.plugin_deb(source, binary_version, arch)
+                with self.assertRaises(ValueError):
+                    CACHE.validate(output, 'test', VERSION, 'amd64')
+
     def test_downloads_all_debs_and_reuses_verified_cache_offline(self):
         with patch.object(CACHE, 'fetch', side_effect=self.fetch) as fetch:
             self.assertTrue(self.restore())

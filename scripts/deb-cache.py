@@ -29,8 +29,14 @@ def fields(text):
 
 def validate(path, package, version, arch):
     control = fields(subprocess.check_output(['dpkg-deb', '-f', str(path)], text=True))
-    source = control.get('Source', control['Package']).split()[0]
-    if source != package or control['Version'] != version or control['Architecture'] not in (arch, 'all'):
+    # Binary packages can have independent versions (e.g. librime plugins).
+    # Debian records their source version in Source: name (version); when
+    # omitted, it is the same as the binary Version.
+    source = re.fullmatch(r'([^\s()]+)(?:\s+\(([^\s()]+)\))?',
+                          control.get('Source', control['Package']))
+    source_version = (source.group(2) or control['Version']) if source else None
+    if (not source or source.group(1) != package or source_version != version
+            or control['Architecture'] not in (arch, 'all')):
         raise ValueError(f'Wrong package/version/architecture: {path.name}')
 
 

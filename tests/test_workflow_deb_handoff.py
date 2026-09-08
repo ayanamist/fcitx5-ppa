@@ -49,6 +49,7 @@ class DebHandoffTest(unittest.TestCase):
                                    if s.get('id') == 'build')
                 for step in jobs[upstream]['steps'][build_index + 1:]:
                     if step.get('uses', '').startswith('actions/upload-artifact@'):
+                        self.assertEqual(step['uses'], 'actions/upload-artifact@v7')
                         self.assertEqual(step['with']['path'],
                                          '~/deb-cache/${{ matrix.package }}/*.deb')
                         self.assertEqual(step['with']['if-no-files-found'], 'error')
@@ -60,6 +61,7 @@ class DebHandoffTest(unittest.TestCase):
                     if step.get('uses', '').startswith('actions/cache/restore@'):
                         shutil.copytree(cache, consumer, dirs_exist_ok=True)
                     if step.get('uses', '').startswith('actions/download-artifact@'):
+                        self.assertEqual(step['uses'], 'actions/download-artifact@v8')
                         self.assertEqual(step['with']['pattern'], 'debs-*')
                         self.assertEqual(step['with']['path'],
                                          '${{ runner.temp }}/upstream-debs')

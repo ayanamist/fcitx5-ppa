@@ -63,7 +63,7 @@ jobs:
           export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
           scripts/build-and-upload.sh "${{ matrix.package }}"
       - name: Upload debs for downstream stages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: debs-${{ matrix.package }}
           path: ~/deb-cache/${{ matrix.package }}/*.deb
@@ -103,7 +103,7 @@ jobs:
       # Cross-stage handoff must use this run's outputs: an exact cache hit
       # cannot be overwritten when the same Debian version is rebuilt as ppaN+1.
       - name: Download upstream debs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: debs-*
           path: ${{ runner.temp }}/upstream-debs
@@ -121,7 +121,7 @@ jobs:
           export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
           scripts/build-and-upload.sh "${{ matrix.package }}"
       - name: Upload debs for downstream stages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: debs-${{ matrix.package }}
           path: ~/deb-cache/${{ matrix.package }}/*.deb
@@ -161,7 +161,7 @@ jobs:
       # Cross-stage handoff must use this run's outputs: an exact cache hit
       # cannot be overwritten when the same Debian version is rebuilt as ppaN+1.
       - name: Download upstream debs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: debs-*
           path: ${{ runner.temp }}/upstream-debs
@@ -179,7 +179,7 @@ jobs:
           export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
           scripts/build-and-upload.sh "${{ matrix.package }}"
       - name: Upload debs for downstream stages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: debs-${{ matrix.package }}
           path: ~/deb-cache/${{ matrix.package }}/*.deb
@@ -219,7 +219,7 @@ jobs:
       # Cross-stage handoff must use this run's outputs: an exact cache hit
       # cannot be overwritten when the same Debian version is rebuilt as ppaN+1.
       - name: Download upstream debs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: debs-*
           path: ${{ runner.temp }}/upstream-debs
