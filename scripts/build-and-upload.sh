@@ -30,11 +30,22 @@ cd "$SRCDIR"
 DEB_VERSION="$(dpkg-parsechangelog -SVersion)"
 echo "Debian source version: ${DEB_VERSION}"
 
-PPA_VER="$("${GITHUB_WORKSPACE}/scripts/get-ppa-version.sh" "$OWNER" "$PPA" "$PKG" "$SERIES" || true)"
+PPA_VER="$("${GITHUB_WORKSPACE}/scripts/get-ppa-version.sh" "$OWNER" "$PPA" "$PKG" "$SERIES")"
 echo "PPA current version: ${PPA_VER:-none}"
 
 BASE_SUFFIX="~${SERIES}1~ppa"
 EXPECTED_PREFIX="${DEB_VERSION}${BASE_SUFFIX}"
+
+# 历史查询可能比当前版本查询更新；先复核有效版本，再决定是否递增。
+# 同时保留 Deleted 等记录的最大 N，避免重复使用 Launchpad 已占用文件名。
+HISTORY="$("${GITHUB_WORKSPACE}/scripts/get-max-ppa-n.sh" "$OWNER" "$PPA" "$PKG" "$SERIES" "$DEB_VERSION" --json)"
+MAX_HIST_N="$(jq -r '.max_n' <<< "$HISTORY")"
+ACTIVE_VERSION="$(jq -r '.active_version' <<< "$HISTORY")"
+echo "PPA historical max ~ppaN for ${DEB_VERSION}: ${MAX_HIST_N:-none}"
+if [[ -n "$ACTIVE_VERSION" ]] && { [[ -z "$PPA_VER" ]] || dpkg --compare-versions "$ACTIVE_VERSION" gt "$PPA_VER"; }; then
+  PPA_VER="$ACTIVE_VERSION"
+  echo "PPA active version from history: ${PPA_VER}"
+fi
 
 # 若 PPA 已发布版本 >= 期望首个 (~ppa1),说明 upstream 未涨或涨得更慢
 # 但若 DEB_CACHE_DIR 里已有该版本 deb, 直接跳过 (无需重编)
@@ -57,17 +68,15 @@ if [[ -n "$PPA_VER" ]]; then
   fi
 fi
 
-# 查历史所有匹配 <DEB_VERSION>~noble1~ppaN 的最大 N (含已 superseded/deleted)
-# Launchpad 拒收重复文件名, 即使 obsolete 也不许再传
-MAX_HIST_N="$("${GITHUB_WORKSPACE}/scripts/get-max-ppa-n.sh" "$OWNER" "$PPA" "$PKG" "$SERIES" "$DEB_VERSION" || true)"
-echo "PPA historical max ~ppaN for ${DEB_VERSION}: ${MAX_HIST_N:-none}"
-
-NEW_N=1
-if [[ -n "$MAX_HIST_N" ]]; then
-  NEW_N=$((MAX_HIST_N + 1))
+if [[ "$SKIP_UPLOAD" == "true" ]]; then
+  NEW_VERSION="$PPA_VER"
+else
+  NEW_N=1
+  if [[ -n "$MAX_HIST_N" ]]; then
+    NEW_N=$((MAX_HIST_N + 1))
+  fi
+  NEW_VERSION="${EXPECTED_PREFIX}${NEW_N}"
 fi
-
-NEW_VERSION="${EXPECTED_PREFIX}${NEW_N}"
 echo "Target PPA version: ${NEW_VERSION}"
 
 # 直接 apply debian-patches/<pkg>/ 里的 patch (修改 debian/ 目录下的文件)
@@ -239,6 +248,20 @@ if [[ -n "${ARTIFACT_DIR:-}" ]]; then
 fi
 
 # 4) 上传源码包到 PPA
+# 构建期间可能已有相同 upstream 版本被接收；重新验证缓存并复查历史。
+if [[ "$SKIP_UPLOAD" != "true" ]]; then
+  FINAL_HISTORY="$("${GITHUB_WORKSPACE}/scripts/get-max-ppa-n.sh" "$OWNER" "$PPA" "$PKG" "$SERIES" "$DEB_VERSION" --json)"
+  FINAL_ACTIVE="$(jq -r '.active_version' <<< "$FINAL_HISTORY")"
+  FINAL_MAX_N="$(jq -r '.max_n' <<< "$FINAL_HISTORY")"
+  if [[ -n "$FINAL_ACTIVE" ]]; then
+    PPA_VER="$FINAL_ACTIVE"
+    SKIP_UPLOAD=true
+    echo "::notice::Pre-upload check found active ${PPA_VER}; skip duplicate upload."
+  elif [[ -n "$FINAL_MAX_N" ]] && (( FINAL_MAX_N >= NEW_N )); then
+    echo "::error::Pre-upload check found target revision already occupied; rerun to allocate a new version."
+    exit 1
+  fi
+fi
 if [[ "$SKIP_UPLOAD" == "true" ]]; then
   echo "::notice::Skipping dput (PPA already has ${PPA_VER}); rebuilt for cache only."
   if [[ -n "${GITHUB_OUTPUT:-}" ]]; then

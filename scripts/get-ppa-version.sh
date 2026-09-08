@@ -12,7 +12,7 @@ SERIES="$4"
 DIST_URL="https://api.launchpad.net/1.0/ubuntu/${SERIES}"
 ARCHIVE_URL="https://api.launchpad.net/1.0/~${OWNER}/+archive/ubuntu/${PPA}"
 
-curl -fsSL --get \
+curl -fsSL -H 'Cache-Control: no-cache' --get \
   --data-urlencode "ws.op=getPublishedSources" \
   --data-urlencode "source_name=${PKG}" \
   --data-urlencode "exact_match=true" \
