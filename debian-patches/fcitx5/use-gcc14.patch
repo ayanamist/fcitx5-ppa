@@ -1,0 +1,34 @@
+Description: Build fcitx5 with GCC 14 on noble
+ GCC 13.3 crashes in build_special_member_call while compiling the GNOME
+ app monitor coroutine introduced in fcitx5 5.1.22. GCC 14.2 from the official
+ noble-updates repository compiles the unmodified source successfully.
+ Declare the versioned build dependencies and select both compilers in
+ debian/rules so pbuilder and Launchpad use the same toolchain.
+Author: fcitx5-ppa automation
+Bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109227
+Forwarded: not-needed
+
+--- a/debian/control
++++ b/debian/control
+@@ -11,6 +11,8 @@
+  debhelper-compat (= 13),
+  dh-exec,
+  extra-cmake-modules,
++ g++-14,
++ gcc-14,
+  gettext,
+  iso-codes,
+  libbrotli-dev,
+--- a/debian/rules
++++ b/debian/rules
+@@ -2,6 +2,10 @@
+ 
+ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+ 
++# GCC 13 crashes when compiling the GNOME app monitor coroutine.
++export CC = gcc-14
++export CXX = g++-14
++
+ config-opt := -DUSE_FLATPAK_ICON=OFF -DENABLE_XDGAUTOSTART=OFF -DUSE_SYSTEM_YOGA=ON
+ 
+ ifneq (linux,$(DEB_HOST_ARCH_OS))
