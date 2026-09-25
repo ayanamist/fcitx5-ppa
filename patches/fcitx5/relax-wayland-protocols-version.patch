@@ -8,25 +8,17 @@ Forwarded: not-needed
 
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -41,9 +41,9 @@
- option(ENABLE_LIBUUID "Use libuuid for uuid generation" On)
- option(BUILD_SPELL_DICT "Build en_dict.fscd for English spell check" On)
- option(BUILD_SHARED_LIBS "Build library as shared libs" On)
+@@ -44,5 +44,5 @@
+ option(ENABLE_DL "Enable dynamic loading addons" On)
  option(USE_SYSTEM_YOGA "Use system installed yoga library" Off)
 -option(USE_SYSTEM_PLASMA_WAYLAND_PROTOCOLS "Use system installed plasma protocols" On)
 +option(USE_SYSTEM_PLASMA_WAYLAND_PROTOCOLS "Use system installed plasma protocols" Off)
  set(NO_PREEDIT_APPS "wps.*,wpp.*,et.*" CACHE STRING "Disable preedit for following app by default.")
  set(EVENT_LOOP_BACKEND "auto" CACHE STRING "Set the underlying event loop implementation, valid values are auto,systemd,libuv,none")
- 
- if (ENABLE_EMOJI)
-@@ -179,9 +179,9 @@
- if (ENABLE_WAYLAND)
-     set(REQUIRED_WAYLAND_COMPONENTS Client Cursor)
+@@ -185,5 +185,5 @@
      find_package(Wayland 1.22 REQUIRED COMPONENTS ${REQUIRED_WAYLAND_COMPONENTS})
      find_package(WaylandScanner REQUIRED)
 -    find_package(WaylandProtocols 1.46 REQUIRED)
 +    find_package(WaylandProtocols 1.45 REQUIRED)
      # Required for gsettings
      pkg_check_modules(Gio REQUIRED IMPORTED_TARGET gio-2.0)
- 
-     if (USE_SYSTEM_PLASMA_WAYLAND_PROTOCOLS)
