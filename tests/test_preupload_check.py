@@ -10,7 +10,7 @@ VERSION = '5.1.15-1~noble1~ppa1'
 
 
 class PreuploadCheckTest(unittest.TestCase):
-    def run_build(self, status=None, fail=False):
+    def run_build(self, status=None, fail=False, initial_failures=0, final_failures=0):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             entries = [] if status is None else [{
@@ -23,6 +23,14 @@ class PreuploadCheckTest(unittest.TestCase):
                 'curl': '''
 case "$*" in *'Cache-Control: no-cache'*) ;; *) touch "$FIXTURE/missing-header";; esac
 case "$*" in *getBuilds*) echo '{"entries": [{"buildstate": "Successfully built"}]}'; exit 0;; esac
+phase=initial
+failures="$INITIAL_FAILURES"
+if [ -f "$FIXTURE/built" ]; then phase=final; failures="$FINAL_FAILURES"; fi
+count=0
+if [ -f "$FIXTURE/count-$phase" ]; then count=$(cat "$FIXTURE/count-$phase"); fi
+count=$((count + 1))
+echo "$count" > "$FIXTURE/count-$phase"
+if [ "$count" -le "$failures" ]; then exit 52; fi
 if [ -f "$FIXTURE/built" ]; then
   if [ "$FAIL_QUERY" = yes ]; then exit 22; fi
   cat "$FIXTURE/response"
@@ -41,6 +49,7 @@ fi
                 path.chmod(0o755)
             env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}',
                        FIXTURE=str(root), FAIL_QUERY='yes' if fail else 'no',
+                       INITIAL_FAILURES=str(initial_failures), FINAL_FAILURES=str(final_failures),
                        OWNER='test', PPA='test', SERIES='noble', GPG_KEY_ID='test',
                        GITHUB_WORKSPACE=str(ROOT), DEBFULLNAME='Test',
                        DEBEMAIL='test@example.org', GITHUB_OUTPUT=str(root / 'output'))
@@ -62,6 +71,25 @@ fi
         result, uploaded, output, _ = self.run_build(fail=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(uploaded)
+        self.assertNotIn('skipped=false', output)
+
+    def test_initial_empty_reply_recovers_before_upload(self):
+        result, uploaded, output, _ = self.run_build(initial_failures=1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(uploaded)
+        self.assertIn(f'uploaded_version={VERSION}', output)
+
+    def test_preupload_empty_reply_recovers_and_skips_duplicate(self):
+        result, uploaded, output, _ = self.run_build('Published', final_failures=1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(uploaded)
+        self.assertIn('skipped=true', output)
+
+    def test_persistent_initial_empty_reply_does_not_allocate_or_upload(self):
+        result, uploaded, output, _ = self.run_build(initial_failures=4)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(uploaded)
+        self.assertNotIn('Target PPA version:', result.stdout)
         self.assertNotIn('skipped=false', output)
 
     def test_unoccupied_version_uploads(self):

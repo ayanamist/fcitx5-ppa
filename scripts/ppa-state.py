@@ -4,14 +4,34 @@ import json
 import re
 import subprocess
 import sys
+import time
 from urllib.parse import urlencode
+
+
+def request_json(url):
+    # Buffer each attempt separately: curl retries to stdout can concatenate a
+    # partial response with the next response and corrupt the JSON.
+    retryable = {5, 6, 7, 18, 22, 28, 35, 52, 55, 56, 92}
+    for attempt in range(4):
+        try:
+            body = subprocess.check_output(
+                ['curl', '-fsSL', '--connect-timeout', '15', '--max-time', '60',
+                 '-H', 'Cache-Control: no-cache', url], text=True)
+        except subprocess.CalledProcessError as error:
+            if error.returncode not in retryable or attempt == 3:
+                raise
+            delay = 2 ** attempt
+            print(f'Launchpad query failed (curl {error.returncode}); '
+                  f'retrying in {delay}s ({attempt + 1}/3)', file=sys.stderr)
+            time.sleep(delay)
+            continue
+        return json.loads(body)
 
 
 def collection(url):
     entries = []
     while url:
-        response = json.loads(subprocess.check_output(
-            ['curl', '-fsSL', '-H', 'Cache-Control: no-cache', url], text=True))
+        response = request_json(url)
         entries.extend(response['entries'])
         url = response.get('next_collection_link')
     return entries
