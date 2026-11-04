@@ -20,20 +20,28 @@ concurrency:
 env:
   OWNER: ${{ vars.OWNER }}
   PPA: ${{ vars.PPA }}
-  SERIES: noble
   DEBEMAIL: ${{ vars.DEBEMAIL }}
   DEBFULLNAME: ${{ vars.OWNER }}
   DEBIAN_FRONTEND: noninteractive
 
 jobs:
   stage1:
-    name: Stage 1
-    runs-on: ubuntu-24.04
+    name: Stage 1 (${{ matrix.series }}, ${{ matrix.package }})
+    runs-on: ${{ matrix.runner }}
+    env:
+      SERIES: ${{ matrix.series }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
+        series: [noble, resolute]
         package: [librime, yoga, fcitx5-gtk]
+        include:
+          - series: noble
+            runner: ubuntu-24.04
+          - series: resolute
+            runner: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-ppa-env
@@ -65,21 +73,30 @@ jobs:
       - name: Upload debs for downstream stages
         uses: actions/upload-artifact@v7
         with:
-          name: debs-${{ matrix.package }}
+          name: debs-${{ env.SERIES }}-${{ matrix.package }}
           path: ~/deb-cache/${{ matrix.package }}/*.deb
           if-no-files-found: error
           overwrite: true
           retention-days: 7
 
   stage2:
-    name: Stage 2
+    name: Stage 2 (${{ matrix.series }}, ${{ matrix.package }})
     needs: stage1
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    env:
+      SERIES: ${{ matrix.series }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
+        series: [noble, resolute]
         package: [fcitx5]
+        include:
+          - series: noble
+            runner: ubuntu-24.04
+          - series: resolute
+            runner: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-ppa-env
@@ -105,7 +122,7 @@ jobs:
       - name: Download upstream debs
         uses: actions/download-artifact@v8
         with:
-          pattern: debs-*
+          pattern: debs-${{ env.SERIES }}-*
           path: ${{ runner.temp }}/upstream-debs
       - name: Build local apt repo
         run: |
@@ -123,21 +140,30 @@ jobs:
       - name: Upload debs for downstream stages
         uses: actions/upload-artifact@v7
         with:
-          name: debs-${{ matrix.package }}
+          name: debs-${{ env.SERIES }}-${{ matrix.package }}
           path: ~/deb-cache/${{ matrix.package }}/*.deb
           if-no-files-found: error
           overwrite: true
           retention-days: 7
 
   stage3:
-    name: Stage 3
+    name: Stage 3 (${{ matrix.series }}, ${{ matrix.package }})
     needs: stage2
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    env:
+      SERIES: ${{ matrix.series }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
+        series: [noble, resolute]
         package: [libime, fcitx5-lua, fcitx5-qt, fcitx5-rime]
+        include:
+          - series: noble
+            runner: ubuntu-24.04
+          - series: resolute
+            runner: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-ppa-env
@@ -163,7 +189,7 @@ jobs:
       - name: Download upstream debs
         uses: actions/download-artifact@v8
         with:
-          pattern: debs-*
+          pattern: debs-${{ env.SERIES }}-*
           path: ${{ runner.temp }}/upstream-debs
       - name: Build local apt repo
         run: |
@@ -181,21 +207,30 @@ jobs:
       - name: Upload debs for downstream stages
         uses: actions/upload-artifact@v7
         with:
-          name: debs-${{ matrix.package }}
+          name: debs-${{ env.SERIES }}-${{ matrix.package }}
           path: ~/deb-cache/${{ matrix.package }}/*.deb
           if-no-files-found: error
           overwrite: true
           retention-days: 7
 
   stage4:
-    name: Stage 4
+    name: Stage 4 (${{ matrix.series }}, ${{ matrix.package }})
     needs: stage3
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    env:
+      SERIES: ${{ matrix.series }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
+        series: [noble, resolute]
         package: [fcitx5-chinese-addons]
+        include:
+          - series: noble
+            runner: ubuntu-24.04
+          - series: resolute
+            runner: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-ppa-env
@@ -221,7 +256,7 @@ jobs:
       - name: Download upstream debs
         uses: actions/download-artifact@v8
         with:
-          pattern: debs-*
+          pattern: debs-${{ env.SERIES }}-*
           path: ${{ runner.temp }}/upstream-debs
       - name: Build local apt repo
         run: |

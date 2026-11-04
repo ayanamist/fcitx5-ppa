@@ -85,31 +85,34 @@ else
 fi
 echo "Target PPA version: ${NEW_VERSION}"
 
-# 直接 apply debian-patches/<pkg>/ 里的 patch (修改 debian/ 目录下的文件)
+# 先公共 patch，再目标发行版 patch；避免将 Noble 的降版本/编译器策略带到 Resolute。
+# 直接 apply debian-patches/{common,<series>}/<pkg>/ (修改 debian/ 文件)
 # 这类 patch 不能加入 quilt series: dpkg-source -b 验证时从 orig tarball 重跑,
 # orig 里没有 debian/ 目录, quilt 会报 "Reversed or previously applied".
-DEB_PATCH_DIR="${GITHUB_WORKSPACE}/debian-patches/${PKG}"
-if [[ -d "$DEB_PATCH_DIR" ]]; then
+for PATCH_SCOPE in common "$SERIES"; do
+  DEB_PATCH_DIR="${GITHUB_WORKSPACE}/debian-patches/${PATCH_SCOPE}/${PKG}"
+  [[ -d "$DEB_PATCH_DIR" ]] || continue
   for p in "$DEB_PATCH_DIR"/*.patch; do
     [[ -f "$p" ]] || continue
-    echo "Applying debian patch $(basename "$p")"
+    echo "Applying ${PATCH_SCOPE} debian patch $(basename "$p")"
     patch -p1 < "$p"
   done
-fi
+done
 
-# 注入 patches/<pkg>/ 里的 patch 文件到 debian/patches/series (quilt 格式)
+# 注入 patches/{common,<series>}/<pkg>/ 到 debian/patches/series (quilt 格式)
 # dpkg-source --before-build 会 quilt push -a 应用这些 patch,
 # pbuilder dpkg-source -x 时同理. 不在此处手动 patch -p1 (避免二次 apply).
-PATCH_DIR="${GITHUB_WORKSPACE}/patches/${PKG}"
-if [[ -d "$PATCH_DIR" ]]; then
+for PATCH_SCOPE in common "$SERIES"; do
+  PATCH_DIR="${GITHUB_WORKSPACE}/patches/${PATCH_SCOPE}/${PKG}"
+  [[ -d "$PATCH_DIR" ]] || continue
   for p in "$PATCH_DIR"/*.patch; do
     [[ -f "$p" ]] || continue
-    echo "Injecting patch $(basename "$p") into debian/patches"
+    echo "Injecting ${PATCH_SCOPE} patch $(basename "$p") into debian/patches"
     mkdir -p debian/patches
     cp "$p" debian/patches/
     basename "$p" >> debian/patches/series
   done
-fi
+done
 
 export DEBEMAIL="${DEBEMAIL:?}"
 export DEBFULLNAME="${DEBFULLNAME:?}"

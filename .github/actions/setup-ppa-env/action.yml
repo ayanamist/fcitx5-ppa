@@ -11,7 +11,7 @@ inputs:
     description: 'GPG private key passphrase'
     required: true
   series:
-    description: 'Ubuntu series (noble, jammy, ...)'
+    description: 'Ubuntu series (noble or resolute)'
     required: true
     default: noble
   owner:

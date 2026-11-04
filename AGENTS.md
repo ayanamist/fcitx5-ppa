@@ -1,18 +1,18 @@
 # fcitx5-ppa 维护指南
 
-自动化 GitHub Action, 每天从 Debian sid 拉取 fcitx5 相关源码包, 重打 `~noble1~ppaN` 后缀, 上传 Launchpad PPA `ppa:ayanamist/fcitx5` 供 Ubuntu 24.04 使用.
+自动化 GitHub Action, 每天从 Debian sid 拉取 fcitx5 相关源码包, 重打 `~<series>1~ppaN` 后缀, 上传 Launchpad PPA `ppa:ayanamist/fcitx5` 供 Ubuntu 24.04 (noble) 和 26.04 (resolute) 使用.
 
-## 追踪的包 (8 个)
+## 追踪的包 (9 个)
 
-`fcitx5`, `fcitx5-chinese-addons`, `fcitx5-gtk`, `fcitx5-qt`, `fcitx5-rime`, `libime`, `librime`, `yoga`
+`fcitx5`, `fcitx5-chinese-addons`, `fcitx5-gtk`, `fcitx5-lua`, `fcitx5-qt`, `fcitx5-rime`, `libime`, `librime`, `yoga`
 
 ## 依赖图 (源自 Debian sid `debian/control` Build-Depends)
 
 ```
 Stage 1 (leaves, 无 PPA 内依赖):  librime, yoga, fcitx5-gtk
 Stage 2 (需 yoga):                fcitx5
-Stage 3 (需 fcitx5[+librime]):    libime, fcitx5-qt, fcitx5-rime
-Stage 4 (需 fcitx5+libime+qt):    fcitx5-chinese-addons
+Stage 3 (需 fcitx5[+librime]):    libime, fcitx5-lua, fcitx5-qt, fcitx5-rime
+Stage 4 (需 fcitx5+libime+lua+qt): fcitx5-chinese-addons
 ```
 
 依赖真相由 `scripts/deps.map` 记录, 用 pbuilder A-hook 校验编译时实际 `-dev` 版本. Debian upstream 若改 Build-Depends 必须人工更新此表. 复核方式: `https://sources.debian.org/src/<pkg>/sid/debian/control/`.
@@ -25,7 +25,7 @@ Stage 4 (需 fcitx5+libime+qt):    fcitx5-chinese-addons
 
 ## 版本策略
 
-Debian sid 版本 `X` → PPA 版本 `X~noble1~ppa1`. 相同前缀已存在则 `~ppaN+1` 递增. PPA 版本 ≥ 期望首个 `~ppa1` 则 skip (说明已发过或 upstream 未变). 不需为 "依赖版本变了" 主动 bump — 相信 Debian maintainer 会 bump upstream, 自动流程只做 rebuild.
+Debian sid 版本 `X` → PPA 版本 `X~<series>1~ppa1` (series 为 noble 或 resolute). 相同前缀已存在则 `~ppaN+1` 递增. PPA 版本 ≥ 期望首个 `~ppa1` 则 skip (说明已发过或 upstream 未变). 不需为 "依赖版本变了" 主动 bump — 相信 Debian maintainer 会 bump upstream, 自动流程只做 rebuild.
 
 ## 构建流程 (per package)
 
@@ -52,24 +52,28 @@ Stage 通过 `needs:` 串行, `fail-fast: false` + `max-parallel: 1` 保 dput �
 - Build-Depends 未列该 dev 包 (dpkg-query 空) → warning 跳过
 - 均不阻塞
 
-## Noble 适配 patch
+## 发行版适配 patch
 
 **两类 patch**:
 
-**`patches/<pkg>/`** — quilt 格式，改**上游源码文件**（orig.tar.xz 里的文件，如 CMakeLists.txt）。build-and-upload.sh 复制到 `debian/patches/` 并追加 `series`，dpkg-source `--before-build` 钩子 apply。
+**`patches/{common,<series>}/<pkg>/`** — quilt 格式，改**上游源码文件**（orig.tar.xz 里的文件，如 CMakeLists.txt）。build-and-upload.sh 复制到 `debian/patches/` 并追加 `series`，dpkg-source `--before-build` 钩子 apply。
 
-**`debian-patches/<pkg>/`** — 标准 unified diff，改 **`debian/` 目录下的文件**（debian.tar.xz 里的文件，如 debian/control）。build-and-upload.sh 在 debuild 前直接 `patch -p1` apply。**不能加入 quilt series**：dpkg-source -b 验证时从 orig 重跑，orig 里无 debian/，会报 "Reversed or previously applied"。
+**`debian-patches/{common,<series>}/<pkg>/`** — 标准 unified diff，改 **`debian/` 目录下的文件**（debian.tar.xz 里的文件，如 debian/control）。build-and-upload.sh 在 debuild 前直接 `patch -p1` apply。**不能加入 quilt series**：dpkg-source -b 验证时从 orig 重跑，orig 里无 debian/，会报 "Reversed or previously applied"。
 
 **判断"API 兼容"**: 看 upstream changelog / SONAME 变化. 若 SONAME 未变，通常 header ABI 兼容. 编译失败说明真断 API，得升级 noble 的 lib 或换其他策略.
 
-**当前 patch**:
-- `patches/fcitx5/relax-wayland-protocols-version.patch`: CMakeLists.txt `WaylandProtocols 1.46→1.45`，`USE_SYSTEM_PLASMA_WAYLAND_PROTOCOLS On→Off`（用自带 XML，noble 的 1.10 缺 org_kde_plasma_stacking_order）
-- `debian-patches/fcitx5/noble-compat.patch`: debhelper-compat 14→13，删 plasma-wayland-protocols dep，**全部 arch-any binary package 补 `${shlibs:Depends}, ${misc:Depends}`**
-- `debian-patches/librime/noble-compat.patch`: 删 libmarisa-dev / libopencc-dev / libutfcpp-dev / libyaml-cpp-dev 版本约束
-- `debian-patches/fcitx5-chinese-addons/noble-compat.patch`: debhelper-compat 14→13，删 libopencc-dev 版本约束，**全部 arch-any binary package 补 `${shlibs:Depends}, ${misc:Depends}`**
-- `debian-patches/fcitx5-lua/noble-compat.patch`: debhelper-compat 14→13，**全部 arch-any binary package 补 `${shlibs:Depends}, ${misc:Depends}`**
+**选择顺序**：先 `common`，再目标 `SERIES`；各目录内按文件名排序。公共 patch 放 `common/<pkg>/`，Noble 专用 patch 放 `noble/<pkg>/`。新增或调整发行版时，先查 [README 的发行版与 patch](README.md#发行版与-patch) 中的版本证据、适用范围和复核命令，再决定保留哪些 patch。
 
-**⚠️ debhelper compat 14 陷阱**：debhelper compat 14 新增特性：`dh_gencontrol` 自动将 `${shlibs:Depends}` 和 `${misc:Depends}` 注入所有 binary package 的依赖字段，即使 `debian/control` 里没有显式写出。Debian upstream（fcitx5/fcitx5-chinese-addons/fcitx5-lua）已依赖此特性，`debian/control` 里的库包 stanza 完全省略了 `Depends` 字段。Noble 只有 debhelper 13.x，**必须降到 compat 13**，但降级后自动注入失效，导致 `libfcitx5core7` 等包的 `Depends` 为空（无 `libxkbcommon0`、无 `libc6`），下游包 pbuilder 构建时找不到 `.so` 而 link 失败。**修法**：凡是降 compat 14→13 的包，必须在 `noble-compat.patch` 里给全部 arch-any binary package 手动补上 `${shlibs:Depends}, ${misc:Depends}`。**Debian upstream 新增包时也要同步更新 patch。**
+**当前 patch**:
+- `debian-patches/common/{fcitx5,fcitx5-chinese-addons,fcitx5-lua}/debhelper-compat.patch`：两套发行版共享，compat 14→13，同时给全部 arch-any 包显式补 `${shlibs:Depends}, ${misc:Depends}`。
+- `patches/noble/fcitx5/relax-wayland-protocols-version.patch`：WaylandProtocols 1.46→1.45，使用内置 Plasma XML。
+- `debian-patches/noble/fcitx5/noble-compat.patch`：移除 Plasma 系统协议依赖。
+- `debian-patches/noble/fcitx5/use-gcc14.patch`：规避 Noble GCC 13 编译 coroutine 的崩溃。
+- `debian-patches/noble/librime/noble-compat.patch`：放宽四项依赖版本约束。
+- `debian-patches/noble/fcitx5-chinese-addons/noble-compat.patch`：放宽 OpenCC 版本约束。
+- Resolute 目前只需公共 patch；保留原始 Wayland/Plasma/OpenCC 等依赖要求和默认编译器。
+
+**⚠️ debhelper compat 14 陷阱**：debhelper compat 14 新增特性：`dh_gencontrol` 自动将 `${shlibs:Depends}` 和 `${misc:Depends}` 注入所有 binary package 的依赖字段，即使 `debian/control` 里没有显式写出。Debian upstream（fcitx5/fcitx5-chinese-addons/fcitx5-lua）已依赖此特性，`debian/control` 里的库包 stanza 完全省略了 `Depends` 字段。Noble 和 Resolute 的 debhelper 均未提供 compat 14 虚包，**必须降到 compat 13**，但降级后自动注入失效，导致 `libfcitx5core7` 等包的 `Depends` 为空（无 `libxkbcommon0`、无 `libc6`），下游包 pbuilder 构建时找不到 `.so` 而 link 失败。**修法**：凡是降 compat 14→13 的包，必须在 `debhelper-compat.patch` 里给全部 arch-any binary package 手动补上 `${shlibs:Depends}, ${misc:Depends}`。**Debian upstream 新增包时也要同步更新 patch。**
 
 **新增 patch 流程**:
 1. pbuilder log 里 `pbuilder-satisfydepends-dummy` 失败 → `debian-patches/`；cmake 报 `Could NOT find X >= Y` → `patches/`
@@ -104,7 +108,7 @@ Stage 通过 `needs:` 串行, `fail-fast: false` + `max-parallel: 1` 保 dput �
 1. `gpg --full-generate-key` 生成 RSA 4096
 2. Launchpad → Your account → OpenPGP keys 加公钥指纹并邮件确认
 3. 创建 PPA https://launchpad.net/~<owner>/+activate-ppa
-4. PPA settings 勾 `Noble Numbat (24.04)` build series
+4. PPA settings 允许 `Noble Numbat (24.04)` 和 `Resolute Raccoon (26.04)` build series
 5. 已签 Ubuntu Code of Conduct
 
 ## 触发方式
@@ -122,24 +126,25 @@ Stage 通过 `needs:` 串行, `fail-fast: false` + `max-parallel: 1` 保 dput �
 scripts/build-and-upload.sh           # 单包: 拉源→dch→debuild→pbuilder(带A-hook)→dput
 scripts/get-ppa-version.sh            # Launchpad API 查 PPA 已发布最新版本
 scripts/deps.map                      # PPA 内依赖映射, 校验用
-patches/<pkg>/*.patch                 # 上游源码 quilt patch (CMakeLists.txt 等, orig.tar.xz 里的文件)
-debian-patches/<pkg>/*.patch          # debian/ 目录 patch (debian/control 等, debian.tar.xz 里的文件)
+patches/{common,<series>}/<pkg>/*.patch                 # 上游源码 quilt patch (CMakeLists.txt 等, orig.tar.xz 里的文件)
+debian-patches/{common,<series>}/<pkg>/*.patch          # debian/ 目录 patch (debian/control 等, debian.tar.xz 里的文件)
 ```
 
 ## 维护动作 checklist
 
 **Debian upstream 新增 binary package**:
-- 若该源码包已有 `noble-compat.patch` 且降了 compat 14→13，**必须**在 patch 里给新包补 `${shlibs:Depends}, ${misc:Depends}`（见上方 debhelper compat 14 陷阱说明）
+- 若该源码包已有公共 `debhelper-compat.patch` 且降了 compat 14→13，**必须**在公共 patch 里给新包补 `${shlibs:Depends}, ${misc:Depends}`（见上方 debhelper compat 14 陷阱说明）
 - 检查方式：对比新旧 `debian/control`，凡 `Architecture: any` 且无 `${shlibs:Depends}` 的 stanza 都要补
 
 **Debian upstream 改包名 / Build-Depends** (最常见维护点):
 1. 更新 `scripts/deps.map` 里 dev 包名或依赖关系
 2. 若跨 stage 依赖新增, 调整 workflow 里 stage 分组
-3. 复核方式: 抓 8 个包的 `debian/control`, `grep '^Build-Depends'` 找 `-dev` / `libfcitx5*` / `libime*` / `libyoga*` / `librime*` / `fcitx5-modules*` / `fcitx5-module-*`
+3. 复核方式: 抓 9 个包的 `debian/control`, `grep '^Build-Depends'` 找 `-dev` / `libfcitx5*` / `libime*` / `libyoga*` / `librime*` / `fcitx5-modules*` / `fcitx5-module-*`
 
-**Ubuntu 新 series** (如 25.04):
-- 修 workflow `env.SERIES` 或改成 matrix 支持多 series (需 pbuilder chroot 各建一份)
-- Launchpad PPA settings 里勾对应 series build
+**Ubuntu 新 series**:
+- 更新四个 stage 的 `matrix.series` 和对应 runner 映射；各 series 使用独立 pbuilder chroot、cache key 和 artifact 下载 pattern。
+- 核对目标发行版依赖版本，将仍需的改动放入公共或对应 series patch 目录，并更新离线样本/回归测试及 README 的证据记录。
+- Launchpad PPA settings 允许对应 series build。
 
 **PPA key 变更**: 无需改代码, `Fetch PPA signing key` 步骤运行时读 API.
 
@@ -193,6 +198,6 @@ debian-patches/<pkg>/*.patch          # debian/ 目录 patch (debian/control 等
 
 手写 patch 行号易错, context 不准导致 apply 失败.
 
-**Stage 分组不变式**: workflow 4 stage 只按 **PPA 内 8 个包的互依赖** 分, 不看 sid 所有 Build-Depends. 判断某包能否上移: 只看其 Build-Depends 是否含追踪的 8 个包产出的 `-dev` (见 `scripts/deps.map`). 复核: `curl https://sources.debian.org/data/main/<x>/<pkg>/<ver>/debian/control` grep Build-Depends.
+**Stage 分组不变式**: workflow 4 stage 只按 **PPA 内 9 个包的互依赖** 分, 不看 sid 所有 Build-Depends. 判断某包能否上移: 只看其 Build-Depends 是否含追踪的 9 个包产出的 `-dev` (见 `scripts/deps.map`). 复核: `curl https://sources.debian.org/data/main/<x>/<pkg>/<ver>/debian/control` grep Build-Depends.
 
 **plasma-wayland-protocols 放宽背景**: noble 只有 1.10.0, sid fcitx5 要求 ≥ 1.20. fcitx5 实际只用 `plasma-window-management.xml` (见 `src/lib/fcitx-wayland/plasma-window-management/CMakeLists.txt`), 该文件 1.10→1.20 是 additive (interface version 16→20), 无 API break. 若版本约束再次升高: 先确认 fcitx5 是否新用了 1.20+ 独有协议文件 (如 `kde-screen-edge-v1.xml`), 若未使用则继续放宽.

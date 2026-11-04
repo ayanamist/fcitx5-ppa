@@ -1,0 +1,11 @@
+--- a/debian/control
++++ b/debian/control
+@@ -21,7 +21,7 @@
+  libimecore-dev (>= 1.1.14),
+  libimepinyin-dev (>= 1.1.14),
+  libimetable-dev (>= 1.1.14),
+- libopencc-dev (>= 1.1.9~),
++ libopencc-dev,
+  nlohmann-json3-dev,
+  pkgconf,
+  qt6-base-dev,

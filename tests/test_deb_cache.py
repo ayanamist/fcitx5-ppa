@@ -143,6 +143,13 @@ class DebCacheTest(unittest.TestCase):
         next(self.cache.glob('*.deb')).write_bytes(b'corrupt')
         self.assertFalse(self.restore([]))
 
+    def test_noble_cache_cannot_satisfy_resolute_build(self):
+        with patch.object(CACHE, 'fetch', side_effect=self.fetch):
+            self.assertTrue(self.restore())
+        with patch.object(CACHE, 'fetch', side_effect=AssertionError('network used')):
+            self.assertFalse(CACHE.restore(self.cache, 'test', '1.0-1~resolute1~ppa1',
+                                           'amd64', []))
+
 
 if __name__ == '__main__':
     unittest.main()

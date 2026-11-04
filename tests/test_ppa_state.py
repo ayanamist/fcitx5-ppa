@@ -152,6 +152,31 @@ class PpaStateTest(unittest.TestCase):
     def test_empty_is_first_upload(self):
         self.assertEqual(self.decide([])['state'], 'absent')
 
+    def test_success_and_revision_history_are_isolated_by_series(self):
+        publications = [
+            {'source_package_version': '1.0-1~noble1~ppa9', 'status': 'Published',
+             'self_link': 'https://fixture/noble',
+             'distro_series_link': 'https://api.launchpad.net/1.0/ubuntu/noble'},
+            {'source_package_version': '1.0-1~resolute1~ppa1', 'status': 'Published',
+             'self_link': 'https://fixture/resolute',
+             'distro_series_link': 'https://api.launchpad.net/1.0/ubuntu/resolute'},
+        ]
+        for series, state, max_n in [('noble', 'success', '9'), ('resolute', 'failed', '1')]:
+            def fetch(url):
+                if 'getBuilds' not in url:
+                    return publications
+                return [{'buildstate': 'Failed to build' if 'resolute' in url
+                         else 'Successfully built'}]
+            output = io.StringIO()
+            with self.subTest(series=series), patch.object(STATE, 'collection', side_effect=fetch), \
+                    patch.object(STATE.sys, 'argv', ['script', 'owner', 'ppa', 'pkg', series, '1.0-1']), \
+                    contextlib.redirect_stdout(output):
+                STATE.main()
+            result = json.loads(output.getvalue())
+            self.assertEqual(result['state'], state)
+            self.assertEqual(result['max_n'], max_n)
+            self.assertEqual(result['active_version'], '1.0-1~noble1~ppa9' if series == 'noble' else '')
+
     def test_collection_follows_pagination(self):
         with patch.object(STATE.subprocess, 'check_output', side_effect=[
                 '{"entries": [1], "next_collection_link": "https://fixture/page2"}',

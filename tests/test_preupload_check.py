@@ -6,16 +6,21 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '5.1.15-1~noble1~ppa1'
 
 
 class PreuploadCheckTest(unittest.TestCase):
+    series = 'noble'
+
+    @property
+    def version(self):
+        return f'5.1.15-1~{self.series}1~ppa1'
+
     def run_build(self, status=None, fail=False, initial_failures=0, final_failures=0):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             entries = [] if status is None else [{
-                'source_package_version': VERSION, 'status': status, 'self_link': 'https://fixture/source',
-                'distro_series_link': 'https://api.launchpad.net/1.0/ubuntu/noble'}]
+                'source_package_version': self.version, 'status': status, 'self_link': 'https://fixture/source',
+                'distro_series_link': f'https://api.launchpad.net/1.0/ubuntu/{self.series}'}]
             (root / 'response').write_text(json.dumps({'entries': entries}))
             mocks = {
                 'apt-get': 'mkdir fcitx5-qt-5.1.15',
@@ -39,7 +44,7 @@ else
 fi
 ''',
                 'dch': 'true',
-                'debuild': f'touch ../fcitx5-qt_{VERSION}.dsc ../fcitx5-qt_{VERSION}_source.changes',
+                'debuild': f'touch ../fcitx5-qt_{self.version}.dsc ../fcitx5-qt_{self.version}_source.changes',
                 'sudo': 'touch "$FIXTURE/built"',
                 'dput': 'touch "$FIXTURE/uploaded"',
             }
@@ -50,7 +55,7 @@ fi
             env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}',
                        FIXTURE=str(root), FAIL_QUERY='yes' if fail else 'no',
                        INITIAL_FAILURES=str(initial_failures), FINAL_FAILURES=str(final_failures),
-                       OWNER='test', PPA='test', SERIES='noble', GPG_KEY_ID='test',
+                       OWNER='test', PPA='test', SERIES=self.series, GPG_KEY_ID='test',
                        GITHUB_WORKSPACE=str(ROOT), DEBFULLNAME='Test',
                        DEBEMAIL='test@example.org', GITHUB_OUTPUT=str(root / 'output'))
             result = subprocess.run(['bash', str(ROOT / 'scripts/build-and-upload.sh'),
@@ -77,7 +82,7 @@ fi
         result, uploaded, output, _ = self.run_build(initial_failures=1)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(uploaded)
-        self.assertIn(f'uploaded_version={VERSION}', output)
+        self.assertIn(f'uploaded_version={self.version}', output)
 
     def test_preupload_empty_reply_recovers_and_skips_duplicate(self):
         result, uploaded, output, _ = self.run_build('Published', final_failures=1)
@@ -96,13 +101,17 @@ fi
         result, uploaded, output, missing_header = self.run_build()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(uploaded)
-        self.assertIn(f'uploaded_version={VERSION}', output)
+        self.assertIn(f'uploaded_version={self.version}', output)
         self.assertFalse(missing_header)
 
     def test_inactive_version_appearing_during_build_aborts(self):
         result, uploaded, _, _ = self.run_build('Deleted')
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(uploaded)
+
+
+class ResolutePreuploadCheckTest(PreuploadCheckTest):
+    series = 'resolute'
 
 
 if __name__ == '__main__':

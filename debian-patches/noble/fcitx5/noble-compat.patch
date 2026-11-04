@@ -1,0 +1,18 @@
+--- a/debian/control
++++ b/debian/control
+@@ -42,7 +42,6 @@
+  libxkbfile-dev,
+  libyoga-dev,
+  pkgconf,
+- plasma-wayland-protocols (>= 1.20),
+  unicode-cldr-core,
+  uuid-dev,
+  wayland-protocols [linux-any],
+@@ -121,7 +120,6 @@
+ Multi-Arch: same
+ Depends:
+  fcitx5-data (= ${source:Version}),
+- plasma-wayland-protocols (>= 1.20),
+  ${shlibs:Depends},
+  ${misc:Depends},
+ Breaks:

@@ -6,19 +6,24 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '1.1.16-1~noble1~ppa1'
 
 
 class PpaVersionReuseTest(unittest.TestCase):
+    series = 'noble'
+
+    @property
+    def version(self):
+        return f'1.1.16-1~{self.series}1~ppa1'
+
     def run_build(self, status, cache=False, failure=False, buildstate="Successfully built"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            entries = [{'source_package_version': VERSION, 'status': status, 'self_link': 'https://fixture/source',
-                        'distro_series_link': 'https://api.launchpad.net/1.0/ubuntu/noble'}]
+            entries = [{'source_package_version': self.version, 'status': status, 'self_link': 'https://fixture/source',
+                        'distro_series_link': f'https://api.launchpad.net/1.0/ubuntu/{self.series}'}]
             (root / 'builds').write_text(json.dumps({'entries': [{'buildstate': buildstate}]}))
             (root / 'history').write_text(json.dumps({'entries': entries}))
             (root / 'old').write_text(json.dumps({'entries': [{
-                'source_package_version': '1.1.15-2~noble1~ppa1',
+                'source_package_version': f'1.1.15-2~{self.series}1~ppa1',
                 'status': 'Published'}]}))
             mocks = {
                 'apt-get': 'mkdir libime-1.1.16',
@@ -38,14 +43,14 @@ class PpaVersionReuseTest(unittest.TestCase):
                 control = root / 'pkg/DEBIAN'
                 control.mkdir(parents=True)
                 (control / 'control').write_text(
-                    f'Package: libime\nVersion: {VERSION}\nArchitecture: amd64\n'
+                    f'Package: libime\nVersion: {self.version}\nArchitecture: amd64\n'
                     'Maintainer: Test <test@example.org>\nDescription: fixture\n')
                 subprocess.run(['dpkg-deb', '--build', str(control.parent), str(cache_dir / 'libime.deb')],
                                check=True, capture_output=True)
                 subprocess.run(['python3', str(ROOT / 'scripts/deb-cache.py'), 'record',
-                                'libime', VERSION, 'amd64', str(cache_dir)], check=True)
+                                'libime', self.version, 'amd64', str(cache_dir)], check=True)
             env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}',
-                       FIXTURE=str(root), OWNER='test', PPA='test', SERIES='noble',
+                       FIXTURE=str(root), OWNER='test', PPA='test', SERIES=self.series,
                        GPG_KEY_ID='test', GITHUB_WORKSPACE=str(ROOT),
                        DEB_CACHE_DIR=str(cache_dir), DEBFULLNAME='Test',
                        DEBEMAIL='test@example.org')
@@ -56,7 +61,7 @@ class PpaVersionReuseTest(unittest.TestCase):
         for status in ('Pending', 'Published'):
             with self.subTest(status=status):
                 result = self.run_build(status)
-                self.assertIn(f'Target PPA version: {VERSION}\n', result.stdout)
+                self.assertIn(f'Target PPA version: {self.version}\n', result.stdout)
                 self.assertIn('rebuild for cache (no dput)', result.stdout)
                 self.assertEqual(result.returncode, 77, result.stderr)
 
@@ -75,13 +80,13 @@ class PpaVersionReuseTest(unittest.TestCase):
 
     def test_failed_build_allocates_next_revision(self):
         result = self.run_build('Published', cache=True, buildstate='Failed to build')
-        self.assertIn('Target PPA version: 1.1.16-1~noble1~ppa2\n', result.stdout)
+        self.assertIn(f'Target PPA version: 1.1.16-1~{self.series}1~ppa2\n', result.stdout)
         self.assertNotIn('no dput', result.stdout)
 
     def test_running_build_does_not_bump(self):
         for state in ('Currently building', 'Needs building', 'Dependency wait'):
             result = self.run_build('Published', buildstate=state)
-            self.assertIn(f'Target PPA version: {VERSION}\n', result.stdout)
+            self.assertIn(f'Target PPA version: {self.version}\n', result.stdout)
             self.assertIn('no dput', result.stdout)
 
     def test_uncertain_build_stops(self):
@@ -94,6 +99,10 @@ class PpaVersionReuseTest(unittest.TestCase):
         result = self.run_build('Published', failure=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn('Target PPA version:', result.stdout)
+
+
+class ResolutePpaVersionReuseTest(PpaVersionReuseTest):
+    series = 'resolute'
 
 
 if __name__ == '__main__':
