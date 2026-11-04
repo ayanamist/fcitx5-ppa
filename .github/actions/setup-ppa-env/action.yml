@@ -27,9 +27,10 @@ runs:
       shell: bash
       run: |
         set -eux
+        sudo bash "$GITHUB_WORKSPACE/scripts/configure-apt-sources.sh"
         sudo apt-get update
         sudo apt-get install -y debian-archive-keyring
-        sudo tee /etc/apt/sources.list.d/debian-sid.sources >/dev/null <<'EOF'
+        sudo tee /etc/apt/ppa-sources.list.d/debian-sid.sources >/dev/null <<'EOF'
         Types: deb-src
         URIs: http://deb.debian.org/debian
         Suites: sid
