@@ -2,6 +2,7 @@
 # 拉Debian sid源码,pbuilder本地测试编译,dput上传
 # 参数: <package>
 # 环境: OWNER, PPA, SERIES, GPG_KEY_ID, GITHUB_WORKSPACE, PBUILDER_BASE (可选)
+# SOURCE_ARTIFACT_DIR 非空时只构建并准备签名源码，交由独立 upload job 上传。
 # 输出到 $GITHUB_OUTPUT: uploaded_version=<ver> (若跳过则空)
 set -euo pipefail
 
@@ -62,6 +63,10 @@ if [[ -n "$PPA_VER" ]]; then
     fi
     if [[ "$CACHE_READY" == "true" ]]; then
       echo "::notice::PPA has ${PPA_VER} >= ${EXPECTED_PREFIX}1 and cache hit; skip."
+      if [[ -n "${SOURCE_ARTIFACT_DIR:-}" ]]; then
+        python3 "${GITHUB_WORKSPACE}/scripts/source-artifact.py" skip \
+          "$SOURCE_ARTIFACT_DIR" "$PKG" "$SERIES" "$DEB_VERSION" "$PPA_VER"
+      fi
       if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
         echo "uploaded_version=" >> "$GITHUB_OUTPUT"
         echo "skipped=true" >> "$GITHUB_OUTPUT"
@@ -264,39 +269,23 @@ if [[ -n "${ARTIFACT_DIR:-}" ]]; then
     \) -exec cp -v {} "$ARTIFACT_DIR/" \;
 fi
 
-# 4) 上传源码包到 PPA
-# 构建期间可能已有相同 upstream 版本被接收；重新验证缓存并复查历史。
-if [[ "$SKIP_UPLOAD" != "true" ]]; then
-  FINAL_HISTORY="$(python3 "${GITHUB_WORKSPACE}/scripts/ppa-state.py" "$OWNER" "$PPA" "$PKG" "$SERIES" "$DEB_VERSION")"
-  FINAL_STATE="$(jq -r '.state' <<< "$FINAL_HISTORY")"
-  if [[ "$FINAL_STATE" == "unknown" ]]; then
-    echo "::error::Pre-upload PPA state is unknown; refusing upload."
-    exit 1
-  fi
-  FINAL_ACTIVE="$(jq -r '.active_version' <<< "$FINAL_HISTORY")"
-  FINAL_MAX_N="$(jq -r '.max_n' <<< "$FINAL_HISTORY")"
-  if [[ -n "$FINAL_ACTIVE" ]]; then
-    PPA_VER="$FINAL_ACTIVE"
-    SKIP_UPLOAD=true
-    echo "::notice::Pre-upload check found active ${PPA_VER}; skip duplicate upload."
-  elif [[ -n "$FINAL_MAX_N" ]] && (( FINAL_MAX_N >= NEW_N )); then
-    echo "::error::Pre-upload check found target revision already occupied; rerun to allocate a new version."
-    exit 1
-  fi
-fi
+# 4) 缓存重建不上传；workflow 把待上传源码交给单独的、持有 PPA 锁的 job。
 if [[ "$SKIP_UPLOAD" == "true" ]]; then
   echo "::notice::Skipping dput (PPA already has ${PPA_VER}); rebuilt for cache only."
+  if [[ -n "${SOURCE_ARTIFACT_DIR:-}" ]]; then
+    python3 "${GITHUB_WORKSPACE}/scripts/source-artifact.py" skip \
+      "$SOURCE_ARTIFACT_DIR" "$PKG" "$SERIES" "$DEB_VERSION" "$PPA_VER"
+  fi
   if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "uploaded_version=" >> "$GITHUB_OUTPUT"
     echo "skipped=true" >> "$GITHUB_OUTPUT"
   fi
   exit 0
 fi
-echo "Uploading ${CHANGES}"
-dput "ppa:${OWNER}/${PPA}" "$CHANGES"
-
-if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-  echo "uploaded_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-  echo "skipped=false" >> "$GITHUB_OUTPUT"
+if [[ -n "${SOURCE_ARTIFACT_DIR:-}" ]]; then
+  python3 "${GITHUB_WORKSPACE}/scripts/source-artifact.py" prepare \
+    "$SOURCE_ARTIFACT_DIR" "$PKG" "$SERIES" "$DEB_VERSION" "$NEW_VERSION" "$CHANGES"
+  echo "::notice::Prepared signed source ${PKG} ${NEW_VERSION} for the upload job."
+  exit 0
 fi
-echo "::notice::Uploaded ${PKG} ${NEW_VERSION}"
+bash "${GITHUB_WORKSPACE}/scripts/upload-source.sh" "$PKG" "$DEB_VERSION" "$NEW_VERSION" "$CHANGES"

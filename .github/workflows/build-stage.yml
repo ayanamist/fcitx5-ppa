@@ -1,0 +1,157 @@
+name: Build and upload one stage
+
+on:
+  workflow_call:
+    inputs:
+      packages:
+        required: true
+        type: string
+      stage:
+        required: true
+        type: number
+      series:
+        required: true
+        type: string
+      runner:
+        required: true
+        type: string
+      upstream:
+        type: boolean
+        default: false
+    secrets:
+      GPG_KEY_ID:
+        required: true
+      GPG_PRIVATE_KEY:
+        required: true
+      GPG_PASSPHRASE:
+        required: true
+
+env:
+  OWNER: ${{ vars.OWNER }}
+  PPA: ${{ vars.PPA }}
+  SERIES: ${{ inputs.series }}
+  DEBEMAIL: ${{ vars.DEBEMAIL }}
+  DEBFULLNAME: ${{ vars.OWNER }}
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  build:
+    name: Build ${{ matrix.package }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(inputs.packages) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-ppa-env
+        with:
+          gpg-key-id: ${{ secrets.GPG_KEY_ID }}
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          series: ${{ env.SERIES }}
+          owner: ${{ env.OWNER }}
+          ppa: ${{ env.PPA }}
+      - name: Resolve deb version
+        id: ver
+        run: bash scripts/resolve-deb-version.sh "${{ matrix.package }}"
+      - name: Cache own debs
+        uses: actions/cache@v6
+        with:
+          key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
+          path: ~/deb-cache/${{ matrix.package }}
+      - name: Download upstream debs
+        if: inputs.upstream
+        uses: actions/download-artifact@v8
+        with:
+          pattern: debs-${{ env.SERIES }}-*
+          path: ${{ runner.temp }}/upstream-debs
+      - name: Build local apt repo
+        if: inputs.upstream
+        run: bash scripts/build-local-repo.sh "${{ runner.temp }}/upstream-debs" "${{ runner.temp }}/local-repo"
+      - name: Build package
+        id: build
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          LOCAL_REPO_DIR: ${{ inputs.upstream && format('{0}/local-repo', runner.temp) || '' }}
+          SOURCE_ARTIFACT_DIR: ${{ runner.temp }}/source-upload
+        run: |
+          chmod +x scripts/*.sh
+          export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
+          scripts/build-and-upload.sh "${{ matrix.package }}"
+      - name: Upload debs for downstream stages
+        uses: actions/upload-artifact@v7
+        with:
+          name: debs-${{ env.SERIES }}-${{ matrix.package }}
+          path: ~/deb-cache/${{ matrix.package }}/*.deb
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+      - name: Upload signed source artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: source-${{ env.SERIES }}-stage${{ inputs.stage }}-${{ matrix.package }}
+          path: ${{ runner.temp }}/source-upload/*
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  upload:
+    name: Upload stage ${{ inputs.stage }}
+    needs: build
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    # Each of the two series has one active stage call, hence at most two
+    # upload jobs contend: one running and one pending. Builds never hold this lock.
+    concurrency:
+      group: ppa-transfer-${{ vars.OWNER }}-${{ vars.PPA }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download source artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: source-${{ env.SERIES }}-stage${{ inputs.stage }}-*
+          path: ${{ runner.temp }}/source-uploads
+      - name: Validate upload plan
+        id: plan
+        env:
+          STAGE: ${{ inputs.stage }}
+          PACKAGES: ${{ inputs.packages }}
+        run: |
+          set -euo pipefail
+          python3 scripts/source-artifact.py plan "$RUNNER_TEMP/source-uploads" "$SERIES" "$STAGE" "$PACKAGES" > "$RUNNER_TEMP/upload-plan.json"
+          python3 - <<'PY'
+          import json, os
+          required = bool(json.load(open(os.environ['RUNNER_TEMP'] + '/upload-plan.json')))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('upload_required=' + str(required).lower() + '\n')
+          PY
+      - name: Install upload tools
+        if: steps.plan.outputs.upload_required == 'true'
+        run: |
+          sudo bash scripts/configure-apt-sources.sh
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dput gnupg curl jq ca-certificates
+      - name: Verify and upload sources in package order
+        if: steps.plan.outputs.upload_required == 'true'
+        run: |
+          set -euo pipefail
+          GNUPGHOME="$(mktemp -d "$RUNNER_TEMP/upload-gnupg.XXXXXX")"
+          export GNUPGHOME
+          trap 'gpgconf --kill gpg-agent 2>/dev/null || true; rm -rf "$GNUPGHOME"' EXIT
+          while IFS=$'\t' read -r PACKAGE SOURCE_DIR; do
+            METADATA="$(python3 "$GITHUB_WORKSPACE/scripts/source-artifact.py" validate "$SOURCE_DIR" "$PACKAGE" "$SERIES")"
+            gpg --batch --quiet --import "$SOURCE_DIR/signing-key.asc"
+            FINGERPRINT="$(gpg --batch --with-colons --show-keys --fingerprint "$SOURCE_DIR/signing-key.asc" | awk -F: '$1 == "fpr" && first == "" {first=$10} END {print first}')"
+            printf '%s:6:\n' "$FINGERPRINT" | gpg --batch --import-ownertrust
+            DEB_VERSION="$(jq -r '.debian_version' <<< "$METADATA")"
+            VERSION="$(jq -r '.version' <<< "$METADATA")"
+            CHANGES="$(jq -r '.changes' <<< "$METADATA")"
+            (
+              cd "$SOURCE_DIR"
+              bash "$GITHUB_WORKSPACE/scripts/upload-source.sh" "$PACKAGE" "$DEB_VERSION" "$VERSION" "$CHANGES"
+            )
+          done < <(jq -r '.[] | [.package, .directory] | @tsv' "$RUNNER_TEMP/upload-plan.json")

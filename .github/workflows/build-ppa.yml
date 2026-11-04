@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/build-ppa.yml'
       - '.github/workflows/build-series.yml'
+      - '.github/workflows/build-stage.yml'
       - '.github/actions/**'
       - 'scripts/**'
       - 'patches/**'
@@ -18,14 +19,13 @@ concurrency:
   group: ppa-upload
   cancel-in-progress: false
 
-# One complete dependency chain per series. Serialize calls to preserve PPA
-# upload ordering; a failed series must not cancel the queued series.
+# Independent series build concurrently; only source upload jobs hold the PPA lock.
 jobs:
   build:
     name: Build ${{ matrix.series }}
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 2
       matrix:
         series: [noble, resolute]
         include:

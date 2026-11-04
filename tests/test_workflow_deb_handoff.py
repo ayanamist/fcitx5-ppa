@@ -4,6 +4,7 @@ Requires PyYAML (python3-yaml).
 """
 from pathlib import Path
 import fnmatch
+import json
 import shutil
 import subprocess
 import tempfile
@@ -14,6 +15,7 @@ import yaml
 
 WORKFLOW = Path(__file__).resolve().parents[1] / '.github/workflows/build-ppa.yml'
 PIPELINE = WORKFLOW.with_name('build-series.yml')
+STAGE_PIPELINE = WORKFLOW.with_name('build-stage.yml')
 
 
 class DebHandoffTest(unittest.TestCase):
@@ -24,17 +26,40 @@ class DebHandoffTest(unittest.TestCase):
         call = calls[0]
         self.assertNotIn('needs', call)
         self.assertFalse(call['strategy']['fail-fast'])
-        self.assertEqual(call['strategy']['max-parallel'], 1)
+        self.assertEqual(call['strategy']['max-parallel'], 2)
         self.assertEqual(call['strategy']['matrix']['series'], ['noble', 'resolute'])
         self.assertEqual(call['with']['series'], '${{ matrix.series }}')
         self.assertNotIn('continue-on-error', call)
         pipeline = yaml.safe_load((WORKFLOW.parents[2] / call['uses'].removeprefix('./')).read_text())
         for index in range(1, 5):
             job = pipeline['jobs'][f'stage{index}']
-            self.assertNotIn('series', job['strategy']['matrix'],
-                             'A shared series matrix couples both distributions through needs')
+            self.assertNotIn('strategy', job, 'Each call must represent the complete stage')
             self.assertEqual(job.get('needs'), f'stage{index - 1}' if index > 1 else None)
             self.assertNotIn('if', job, 'Failed upstream builds must still block their own downstream')
+
+    def test_only_source_uploads_share_the_ppa_lock(self):
+        workflow = yaml.safe_load(WORKFLOW.read_text())
+        pipeline = yaml.safe_load(PIPELINE.read_text())
+        package = yaml.safe_load(STAGE_PIPELINE.read_text())
+        self.assertNotIn('concurrency', package['jobs']['build'])
+        upload = package['jobs']['upload']
+        self.assertEqual(upload['needs'], 'build')
+        lock = upload['concurrency']
+        self.assertEqual(lock['group'], 'ppa-transfer-${{ vars.OWNER }}-${{ vars.PPA }}')
+        self.assertNotIn('series', lock['group'])
+        self.assertNotIn('package', lock['group'])
+        self.assertNotEqual(lock['group'], workflow['concurrency']['group'])
+        self.assertFalse(lock['cancel-in-progress'])
+        # One parent run, two series, one stage call per series: at most
+        # two nonterminal upload jobs, fitting GitHub's one-running/one-pending queue.
+        self.assertEqual(workflow['jobs']['build']['strategy']['max-parallel'], 2)
+        for stage in pipeline['jobs'].values():
+            self.assertEqual(stage['uses'], './.github/workflows/build-stage.yml')
+        self.assertNotIn('strategy', upload, 'One upload job serializes the whole stage')
+        self.assertFalse(package['jobs']['build']['strategy']['fail-fast'])
+        self.assertGreaterEqual(package['jobs']['build']['strategy'].get('max-parallel', 4), 4)
+        self.assertEqual(package['jobs']['build']['strategy']['matrix']['package'],
+                         '${{ fromJSON(inputs.packages) }}')
 
     def test_each_series_uses_its_own_runner_cache_and_four_stages(self):
         workflow = yaml.safe_load(WORKFLOW.read_text())
@@ -51,8 +76,10 @@ class DebHandoffTest(unittest.TestCase):
         # PyYAML's YAML 1.1 loader reads the unquoted "on" key as True.
         triggers = workflow.get('on', workflow.get(True))
         self.assertIn('.github/workflows/build-series.yml', triggers['push']['paths'])
+        self.assertIn('.github/workflows/build-stage.yml', triggers['push']['paths'])
         pipeline = yaml.safe_load(PIPELINE.read_text())
-        self.assertEqual(pipeline['env']['SERIES'], '${{ inputs.series }}')
+        package_pipeline = yaml.safe_load(STAGE_PIPELINE.read_text())
+        self.assertEqual(package_pipeline['env']['SERIES'], '${{ inputs.series }}')
         self.assertNotIn('concurrency', pipeline,
                          'A child concurrency group can cancel or deadlock its caller')
         expected = {
@@ -64,20 +91,29 @@ class DebHandoffTest(unittest.TestCase):
         for index, (name, packages) in enumerate(expected.items(), start=1):
             job = pipeline['jobs'][name]
             self.assertEqual(job.get('needs'), f'stage{index - 1}' if index > 1 else None)
-            self.assertEqual(job['strategy']['max-parallel'], 1)
-            self.assertFalse(job['strategy']['fail-fast'])
-            matrix = job['strategy']['matrix']
-            self.assertNotIn('series', matrix)
-            self.assertEqual(matrix['package'], packages)
-            self.assertEqual(job['runs-on'], '${{ inputs.runner }}')
-            setup = next(s for s in job['steps']
-                         if s.get('uses') == './.github/actions/setup-ppa-env')
-            self.assertEqual(setup['with']['series'], '${{ env.SERIES }}')
-            cache = next(s for s in job['steps']
-                         if s.get('name') == 'Cache own debs')
-            self.assertEqual(cache['with']['key'],
-                             'debs-${{ matrix.package }}-${{ env.SERIES }}-'
-                             '${{ steps.ver.outputs.deb_version }}')
+            self.assertEqual(job['uses'], './.github/workflows/build-stage.yml')
+            self.assertEqual(json.loads(job['with']['packages']), packages)
+            self.assertEqual(job['with'], {'packages': json.dumps(packages), 'stage': index,
+                                          'series': '${{ inputs.series }}',
+                                          'runner': '${{ inputs.runner }}',
+                                          'upstream': index > 1})
+            self.assertEqual(job['secrets'], 'inherit')
+        build = package_pipeline['jobs']['build']
+        self.assertEqual(build['runs-on'], '${{ inputs.runner }}')
+        setup = next(s for s in build['steps']
+                     if s.get('uses') == './.github/actions/setup-ppa-env')
+        self.assertEqual(setup['with']['series'], '${{ env.SERIES }}')
+        cache = next(s for s in build['steps'] if s.get('name') == 'Cache own debs')
+        self.assertEqual(cache['with']['key'],
+                         'debs-${{ matrix.package }}-${{ env.SERIES }}-'
+                         '${{ steps.ver.outputs.deb_version }}')
+        download = next(s for s in build['steps'] if s.get('name') == 'Download upstream debs')
+        self.assertEqual(download['if'], 'inputs.upstream')
+        upload_steps = package_pipeline['jobs']['upload']['steps']
+        source = next(s for s in upload_steps if s.get('name') == 'Download source artifacts')
+        self.assertEqual(source['with']['pattern'],
+                         'source-${{ env.SERIES }}-stage${{ inputs.stage }}-*')
+        self.assertNotIn('secrets.', str(package_pipeline['jobs']['upload']))
         setup = yaml.safe_load((WORKFLOW.parents[1] / 'actions/setup-ppa-env/action.yml').read_text())
         cache = next(s for s in setup['runs']['steps'] if s.get('id') == 'pbuilder-cache')
         self.assertIn('${{ inputs.series }}', cache['with']['path'])
@@ -85,6 +121,7 @@ class DebHandoffTest(unittest.TestCase):
 
     def test_rebuilt_revision_reaches_next_stage_despite_old_cache(self):
         jobs = yaml.safe_load(PIPELINE.read_text())['jobs']
+        build = yaml.safe_load(STAGE_PIPELINE.read_text())['jobs']['build']
         cases = [(series, upstream, downstream)
                  for series in ['noble', 'resolute']
                  for upstream, downstream in [('stage1', 'stage2'),
@@ -120,10 +157,11 @@ class DebHandoffTest(unittest.TestCase):
                 wrong_artifact.mkdir()
                 build_deb(f'1.1.16-1~{other}1~ppa99', wrong_artifact / 'other-series.deb')
                 # Exact cache hits are immutable: the producer cannot save ppa2.
-                build_index = next(i for i, s in enumerate(jobs[upstream]['steps'])
+                self.assertTrue(jobs[downstream]['with']['upstream'])
+                build_index = next(i for i, s in enumerate(build['steps'])
                                    if s.get('id') == 'build')
-                for step in jobs[upstream]['steps'][build_index + 1:]:
-                    if step.get('uses', '').startswith('actions/upload-artifact@'):
+                for step in build['steps'][build_index + 1:]:
+                    if step.get('name') == 'Upload debs for downstream stages':
                         self.assertEqual(step['uses'], 'actions/upload-artifact@v7')
                         self.assertEqual(step['with']['path'],
                                          '~/deb-cache/${{ matrix.package }}/*.deb')
@@ -132,7 +170,7 @@ class DebHandoffTest(unittest.TestCase):
                         name = name.replace('${{ matrix.package }}', 'libime')
                         self.assertEqual(name, f'debs-{series}-libime')
                         shutil.copytree(producer, artifacts / name, dirs_exist_ok=True)
-                for step in jobs[downstream]['steps']:
+                for step in build['steps']:
                     if step.get('name') == 'Build local apt repo':
                         self.assertIn('"${{ runner.temp }}/upstream-debs"', step['run'])
                         break

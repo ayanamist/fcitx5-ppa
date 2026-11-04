@@ -22,9 +22,11 @@ Debian sid 版本 `X` → PPA 版本 `X~noble1~ppa1` / `X~resolute1~ppa1`.
 
 ## 构建策略
 
-入口 [build-ppa.yml](.github/workflows/build-ppa.yml) 按发行版调用 [build-series.yml](.github/workflows/build-series.yml)，每次调用只负责一个发行版的完整四阶段依赖链。某个发行版失败只阻止它自己的下游阶段，另一个发行版仍会继续；整个 run 最终仍会报告失败。
+入口 [build-ppa.yml](.github/workflows/build-ppa.yml) 同时启动 Noble 和 Resolute，两套发行版各有独立的四阶段依赖链。每个阶段由 [build-stage.yml](.github/workflows/build-stage.yml) 并行构建该阶段的所有包；某个包失败不取消同阶段其他构建，但会阻止该发行版进入下一阶段。
 
-入口的 series matrix 和子流程每阶段的 package matrix 均使用 `max-parallel: 1`，保留同一 PPA 的上传顺序；入口设置 `fail-fast: false`，失败不会取消排队中的另一个发行版。全局 `concurrency: ppa-upload` 防止不同 run 并发上传。Noble 使用 `ubuntu-24.04` runner，Resolute 使用 `ubuntu-26.04` runner，分别建立对应 pbuilder chroot。缓存 key、跨阶段 artifact 名和下载 pattern 均包含 series，防止混用二进制。
+编译完成后，阶段的独立 upload job 按 package 列表顺序上传签名源码包。只有 upload job 使用同一 PPA 的 `ppa-transfer-<owner>-<ppa>` concurrency 锁，构建任务不上锁。阶段间通过本次 run 的 deb artifact 传递依赖，所有缓存和 artifact 均包含 series。
+
+全局 `concurrency: ppa-upload` 保持不同 workflow run 串行，避免版本分配竞态。单个 run 内两套发行版并行，且每套只有一个活动阶段，因此同时最多有两个 upload job 争用 PPA 锁，可安全使用 GitHub 的一个运行、一个等待队列。增加发行版或改变阶段依赖关系时，需同步调整上传队列容量。
 
 - **Stage 1** 无 PPA 内依赖: `librime`, `yoga`, `fcitx5-gtk`
 - **Stage 2** 需 `yoga`: `fcitx5`
@@ -37,8 +39,9 @@ Debian sid 版本 `X` → PPA 版本 `X~noble1~ppa1` / `X~resolute1~ppa1`.
 3. `debuild -S -sa` 生成签名源码包
 4. **`pbuilder` 本地测试编译** (chroot 含本 PPA, 缓存到 GH Actions cache)
    - **A-hook 校验**: build-dep 装完后 `dpkg-query` 校验关键 `-dev` 包版本 ≥ 同一发行版 PPA 上游最新版本, 不足则 fail
-5. 再次检查 Launchpad 历史，确认无需跳过后用 `dput ppa:ayanamist/fcitx5` 上传源码包。
-6. 后续阶段通过本次 run 的 artifact 建本地 apt repo，取得上游刚编出的 `-dev` 包。
+5. 准备包含 `.changes`、`.dsc`、全部 orig/component tarball、校验信息和签名公钥的源码 artifact；私钥只用于构建任务的签名。
+6. upload job 取得 PPA 锁后验证 artifact，并重新检查 Launchpad 历史，确认无需跳过后用 `dput ppa:ayanamist/fcitx5` 上传。
+7. 后续阶段通过本次 run 的 deb artifact 建本地 apt repo，取得上游刚编出的 `-dev` 包。
 
 依赖表在 [scripts/deps.map](scripts/deps.map). Debian upstream 若改 Build-Depends, 需人工更新.
 
@@ -95,8 +98,11 @@ Actions → "Build and upload to PPA" → Run workflow.
 ```
 .github/workflows/build-ppa.yml       # 入口：按 series 调用独立子流程
 .github/workflows/build-series.yml    # 单个 series 的 4 stages
+.github/workflows/build-stage.yml     # stage 内并行构建、独立串行上传
 .github/actions/setup-ppa-env/        # composite action: apt/gpg/pbuilder
-scripts/build-and-upload.sh           # 单包: 拉源→pbuilder→dput
+scripts/build-and-upload.sh           # 单包: 拉源→pbuilder→准备签名源码
+scripts/source-artifact.py           # 完整源码 artifact 的准备与校验
+scripts/upload-source.sh             # 持锁后复查版本并 dput
 scripts/get-ppa-version.sh            # 查 PPA 已发布最新版本
 scripts/check-ppa-series.sh           # 判断目标发行版 PPA 索引是否已发布
 scripts/configure-apt-sources.sh      # 为 runner 配置独立的构建软件源
@@ -110,5 +116,5 @@ tests/fixtures/debian-sid/            # 固定版本源码，离线验证 patch
 
 ```bash
 bash scripts/test.sh
-actionlint .github/workflows/build-ppa.yml .github/workflows/build-series.yml
+actionlint .github/workflows/build-ppa.yml .github/workflows/build-series.yml .github/workflows/build-stage.yml
 ```

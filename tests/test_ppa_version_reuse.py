@@ -53,9 +53,13 @@ class PpaVersionReuseTest(unittest.TestCase):
                        FIXTURE=str(root), OWNER='test', PPA='test', SERIES=self.series,
                        GPG_KEY_ID='test', GITHUB_WORKSPACE=str(ROOT),
                        DEB_CACHE_DIR=str(cache_dir), DEBFULLNAME='Test',
+                       SOURCE_ARTIFACT_DIR=str(root / 'source-artifact'),
                        DEBEMAIL='test@example.org')
-            return subprocess.run(['bash', str(ROOT / 'scripts/build-and-upload.sh'),
-                                   'libime'], env=env, text=True, capture_output=True)
+            result = subprocess.run(['bash', str(ROOT / 'scripts/build-and-upload.sh'),
+                                     'libime'], env=env, text=True, capture_output=True)
+            metadata = root / 'source-artifact/source-upload.json'
+            self.source_metadata = json.loads(metadata.read_text()) if metadata.exists() else None
+            return result
 
     def test_active_history_reuses_version_on_cache_miss(self):
         for status in ('Pending', 'Published'):
@@ -69,6 +73,9 @@ class PpaVersionReuseTest(unittest.TestCase):
         result = self.run_build('Published', cache=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('cache hit; skip.', result.stdout)
+        self.assertIs(self.source_metadata['upload_required'], False)
+        self.assertEqual(self.source_metadata['version'], self.version)
+        self.assertEqual(self.source_metadata['series'], self.series)
 
     def test_inactive_history_blocks(self):
         for status in ('Deleted', 'Superseded', 'Obsolete'):

@@ -37,7 +37,11 @@ Debian sid 版本 `X` → PPA 版本 `X~<series>1~ppa1` (series 为 noble 或 re
 6. `dput ppa:$OWNER/$PPA` 上传
 7. 将本次 run 的 deb artifact 交给后续 stage，建立本地 apt repo；下游编译无需等 Launchpad 发布。
 
-`build-ppa.yml` 用 series matrix 调用 `build-series.yml`，每个调用只包含单个发行版。子流程的四个 stage 通过 `needs:` 串行；失败只阻止同一发行版的下游。入口和每阶段均使用 `fail-fast: false` + `max-parallel: 1`，保留上传顺序且不取消另一发行版。入口的 `concurrency: ppa-upload` 防止跨 run 并发。修改时同步维护 [README 的构建策略](README.md#构建策略) 和依赖链回归测试。
+`build-ppa.yml` 的 series matrix 使用 `max-parallel: 2`、`fail-fast: false`，两套发行版同时执行各自的 `build-series.yml` 四阶段 needs 链。`build-stage.yml` 的 build matrix 并行构建同阶段所有包，构建任务不持上传锁。阶段全部构建成功后，其单独的 upload job 按 package 列表顺序上传；下一阶段依赖整个前一阶段调用完成。
+
+**上传锁不变式**：入口 `concurrency: ppa-upload` 保持不同 run 串行；各发行版始终只有一个活动阶段，故最多两个 stage upload job 争用 `ppa-transfer-<owner>-<ppa>` 锁，一个运行、一个等待，不会出现第三个 pending job 替换旧任务。锁只挂在 upload job，并与入口 group 不同。增加发行版、并发 run 或改变阶段依赖时，必须重新核对队列容量，并同步更新依赖链回归测试。
+
+**源码交接**：build job 将签名 `.changes`、`.dsc`、完整 orig/component tarball 和公钥打包为 source artifact。缓存命中或仅补缓存也必须生成显式 no-upload 元数据，stage 协调器要求每个包均有记录。upload job 校验 package、series、source version、文件大小和 SHA256，取得锁后再次查询 PPA，避免排队期间版本已存在而重复上传。私钥不进入 artifact。
 
 ## 依赖版本一致性校验 (关键)
 
@@ -123,7 +127,8 @@ Debian sid 版本 `X` → PPA 版本 `X~<series>1~ppa1` (series 为 noble 或 re
 
 ```
 .github/workflows/build-ppa.yml       # series matrix 调用入口
-.github/workflows/build-series.yml    # 单个 series 的 4 stage package matrix
+.github/workflows/build-series.yml    # 单个 series 的 4 stage needs 链
+.github/workflows/build-stage.yml     # 包并行构建 + stage upload 锁
 .github/actions/setup-ppa-env/        # composite: apt/gpg/pbuilder chroot
 scripts/build-and-upload.sh           # 单包: 拉源→dch→debuild→pbuilder(带A-hook)→dput
 scripts/get-ppa-version.sh            # Launchpad API 查 PPA 已发布最新版本
@@ -182,7 +187,7 @@ debian-patches/{common,<series>}/<pkg>/*.patch          # debian/ 目录 patch (
 - **只上传源码包让 Launchpad 编译二进制**: PPA 通常拒二进制 upload, 且 Launchpad 有 arm64/riscv64 build farm 支持多架构 — 本地 GH runner 只有 amd64.
 - **`~noble1~ppa1` 后缀而非 `ubuntu1~noble1~ppa1`**: 前者更简洁, 保 Debian 原始 revision (`-1`) 语义清晰. `~` 在 dpkg 版本比较里小于任何字符, 保证 upstream 未来发新版时能正常覆盖.
 - **不做主动 no-change rebuild** (依赖 bump 触发): 相信 Debian maintainer 处理 SONAME/ABI. 用 D-hook 兜底检测 pbuilder 编译期版本一致性.
-- **每 stage `max-parallel: 1`**: dput 无锁, 并发上传同 PPA 会竞态. Launchpad 也可能因 orig tarball 上传时序错乱拒收.
+- **独立 stage upload job**: dput 上传同一 PPA 时必须串行；构建可并行。stage 内按 package 列表顺序上传，发行版间由同一 PPA 锁协调。
 - **pbuilder 而非 sbuild**: pbuilder 在 GH Actions 上启动更快, sbuild 需 schroot 配置更繁琐. 精度差别对本场景不显著.
 - **chroot cache key 含 run_id + restore prefix**: 每次 workflow 建独立 cache 但可复用旧, 保证 base.tgz 每天至少刷一次 apt cache.
 
