@@ -49,7 +49,7 @@ runs:
         sudo apt-get install -y --no-install-recommends \
           devscripts dput debhelper dpkg-dev \
           dh-sequence-gir gobject-introspection \
-          pbuilder ubuntu-dev-tools \
+          pbuilder \
           apt-utils \
           distro-info distro-info-data libdistro-info-perl \
           gnupg curl jq ca-certificates
@@ -125,6 +125,17 @@ runs:
         echo "PPA_KEYRING=/etc/apt/keyrings/ppa-${OWNER}-${PPA}.gpg" >> "$GITHUB_ENV"
         echo "PPA_ALLOW_UNTRUSTED=no" >> "$GITHUB_ENV"
 
+    - name: Check PPA series publication
+      shell: bash
+      env:
+        OWNER: ${{ inputs.owner }}
+        PPA: ${{ inputs.ppa }}
+        SERIES: ${{ inputs.series }}
+      run: |
+        set -euo pipefail
+        PPA_HAS_SERIES="$(bash "$GITHUB_WORKSPACE/scripts/check-ppa-series.sh" "$OWNER" "$PPA" "$SERIES")"
+        echo "PPA_HAS_SERIES=$PPA_HAS_SERIES" >> "$GITHUB_ENV"
+
     - name: Cache pbuilder chroot
       id: pbuilder-cache
       uses: actions/cache@v6
@@ -156,15 +167,19 @@ runs:
         # 必须加进 OTHERMIRROR 否则 chroot 只看到 noble 主仓的老版本
         BASE_MIRRORS="deb http://archive.ubuntu.com/ubuntu ${SERIES}-updates main universe | deb http://archive.ubuntu.com/ubuntu ${SERIES}-security main universe"
         if [[ "${PPA_ALLOW_UNTRUSTED:-yes}" == "no" ]]; then
-          KEYRING_LINE="OTHERMIRROR=\"${BASE_MIRRORS} | deb [signed-by=${PPA_KEYRING}] http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main\""
+          PPA_MIRROR="deb [signed-by=${PPA_KEYRING}] http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main"
           UNTRUSTED_LINE="ALLOWUNTRUSTED=no"
           # BINDMOUNTS让chroot访问keyring
           BINDMOUNTS_LINE="BINDMOUNTS=\"${PPA_KEYRING%/*}\""
         else
-          KEYRING_LINE="OTHERMIRROR=\"${BASE_MIRRORS} | deb http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main\""
+          PPA_MIRROR="deb http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main"
           UNTRUSTED_LINE="ALLOWUNTRUSTED=yes"
           BINDMOUNTS_LINE=""
         fi
+        if [[ "${PPA_HAS_SERIES:?}" == "false" ]]; then
+          PPA_MIRROR=""
+        fi
+        KEYRING_LINE="OTHERMIRROR=\"${BASE_MIRRORS}${PPA_MIRROR:+ | ${PPA_MIRROR}}\""
         sudo tee /etc/pbuilderrc >/dev/null <<EOF
         DISTRIBUTION=${SERIES}
         COMPONENTS="main universe"

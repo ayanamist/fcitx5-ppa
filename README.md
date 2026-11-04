@@ -22,7 +22,9 @@ Debian sid 版本 `X` → PPA 版本 `X~noble1~ppa1` / `X~resolute1~ppa1`.
 
 ## 构建策略
 
-四阶段串行, 每阶段的 package × series matrix 使用 `max-parallel: 1` 保证 dput 顺序. Noble 使用 `ubuntu-24.04` runner，Resolute 使用 `ubuntu-26.04` runner，分别建立对应 pbuilder chroot。缓存 key、跨阶段 artifact 名和下载 pattern 均包含 series，防止混用二进制。某阶段任一发行版失败时，整个下一阶段不会启动。
+入口 [build-ppa.yml](.github/workflows/build-ppa.yml) 按发行版调用 [build-series.yml](.github/workflows/build-series.yml)，每次调用只负责一个发行版的完整四阶段依赖链。某个发行版失败只阻止它自己的下游阶段，另一个发行版仍会继续；整个 run 最终仍会报告失败。
+
+入口的 series matrix 和子流程每阶段的 package matrix 均使用 `max-parallel: 1`，保留同一 PPA 的上传顺序；入口设置 `fail-fast: false`，失败不会取消排队中的另一个发行版。全局 `concurrency: ppa-upload` 防止不同 run 并发上传。Noble 使用 `ubuntu-24.04` runner，Resolute 使用 `ubuntu-26.04` runner，分别建立对应 pbuilder chroot。缓存 key、跨阶段 artifact 名和下载 pattern 均包含 series，防止混用二进制。
 
 - **Stage 1** 无 PPA 内依赖: `librime`, `yoga`, `fcitx5-gtk`
 - **Stage 2** 需 `yoga`: `fcitx5`
@@ -39,6 +41,14 @@ Debian sid 版本 `X` → PPA 版本 `X~noble1~ppa1` / `X~resolute1~ppa1`.
 6. 后续阶段通过本次 run 的 artifact 建本地 apt repo，取得上游刚编出的 `-dev` 包。
 
 依赖表在 [scripts/deps.map](scripts/deps.map). Debian upstream 若改 Build-Depends, 需人工更新.
+
+### 构建环境与首次发布
+
+2026-11-04 的 [run 41829093977](https://github.com/ayanamist/fcitx5-ppa/actions/runs/41829093977) 中，Noble 的三个 Stage 1 任务成功；Resolute 的三个任务均在安装构建工具时失败，尚未进入源码打包或编译。原因是 Resolute 的 `ubuntu-dev-tools 0.210` 依赖 `dput-ng`，后者与显式安装的 `dput` 冲突。仓库没有调用 `ubuntu-dev-tools` 提供的命令，因此安装列表只保留独立的构建工具和原有 `dput`，不安装此聚合包。依赖关系可从官方 [main](https://archive.ubuntu.com/ubuntu/dists/resolute/main/binary-amd64/Packages.xz)、[universe](https://archive.ubuntu.com/ubuntu/dists/resolute/universe/binary-amd64/Packages.xz) 包索引复核。
+
+PPA 的签名 key 属于整个 archive，不能据此判断某个发行版已有索引。当天 [Resolute Release](https://ppa.launchpadcontent.net/ayanamist/fcitx5/ubuntu/dists/resolute/Release) 仍返回 404。`scripts/check-ppa-series.sh` 按发行版检查：200 时加入 PPA，404 时在 pbuilder create/update 中暂时省略 PPA，只使用 Ubuntu 仓库和本次 run 的上游 deb 本地仓库；网络错误、403、5xx 等均使流程失败。后续任务会重新检查，索引发布后恢复原有签名 PPA 源。
+
+验证：`bash scripts/test.sh` 覆盖真实 APT resolver 的最小冲突重现、两套独立依赖链、产物隔离、空索引 bootstrap 及异常查询阻断；`actionlint .github/workflows/build-ppa.yml .github/workflows/build-series.yml` 检查 workflow。另已使用完整 Resolute release 包索引进行隔离的 `apt-get -s --no-install-recommends install ...` 对照：原列表因 dput 冲突失败，修复后的列表可解析。上述验证未实际安装构建环境，也不代表 pbuilder 或 Launchpad 编译已完成。
 
 ## 发行版与 patch
 
@@ -107,10 +117,12 @@ Actions → "Build and upload to PPA" → Run workflow.
 ## 结构
 
 ```
-.github/workflows/build-ppa.yml       # 4 stages × noble/resolute
+.github/workflows/build-ppa.yml       # 入口：按 series 调用独立子流程
+.github/workflows/build-series.yml    # 单个 series 的 4 stages
 .github/actions/setup-ppa-env/        # composite action: apt/gpg/pbuilder
 scripts/build-and-upload.sh           # 单包: 拉源→pbuilder→dput
 scripts/get-ppa-version.sh            # 查 PPA 已发布最新版本
+scripts/check-ppa-series.sh           # 判断目标发行版 PPA 索引是否已发布
 debian-patches/common/<pkg>/*.patch   # 两套发行版共享的打包兼容 patch
 debian-patches/noble/<pkg>/*.patch    # Noble 专用的依赖/编译器调整
 patches/noble/<pkg>/*.patch           # Noble 专用上游 quilt patch

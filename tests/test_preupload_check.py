@@ -15,7 +15,8 @@ class PreuploadCheckTest(unittest.TestCase):
     def version(self):
         return f'5.1.15-1~{self.series}1~ppa1'
 
-    def run_build(self, status=None, fail=False, initial_failures=0, final_failures=0):
+    def run_build(self, status=None, fail=False, initial_failures=0, final_failures=0,
+                  has_series=True, local_repo=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             entries = [] if status is None else [{
@@ -45,21 +46,29 @@ fi
 ''',
                 'dch': 'true',
                 'debuild': f'touch ../fcitx5-qt_{self.version}.dsc ../fcitx5-qt_{self.version}_source.changes',
-                'sudo': 'touch "$FIXTURE/built"',
+                'sudo': 'printf "%s\\n" "$*" >> "$FIXTURE/pbuilder-args"; touch "$FIXTURE/built"',
                 'dput': 'touch "$FIXTURE/uploaded"',
             }
             for name, body in mocks.items():
                 path = root / name
                 path.write_text('#!/bin/sh\n' + body + '\n')
                 path.chmod(0o755)
+            repo = root / 'local-repo'
+            repo.mkdir()
+            (repo / 'Packages').touch()
             env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}',
                        FIXTURE=str(root), FAIL_QUERY='yes' if fail else 'no',
                        INITIAL_FAILURES=str(initial_failures), FINAL_FAILURES=str(final_failures),
                        OWNER='test', PPA='test', SERIES=self.series, GPG_KEY_ID='test',
                        GITHUB_WORKSPACE=str(ROOT), DEBFULLNAME='Test',
+                       PPA_HAS_SERIES='true' if has_series else 'false',
+                       PPA_ALLOW_UNTRUSTED='no', PPA_KEYRING='/fixture/ppa.gpg',
+                       LOCAL_REPO_DIR=str(repo) if local_repo else '',
                        DEBEMAIL='test@example.org', GITHUB_OUTPUT=str(root / 'output'))
             result = subprocess.run(['bash', str(ROOT / 'scripts/build-and-upload.sh'),
                                      'fcitx5-qt'], env=env, capture_output=True, text=True)
+            args = root / 'pbuilder-args'
+            self.pbuilder_args = args.read_text() if args.exists() else ''
             return (result, (root / 'uploaded').exists(),
                     (root / 'output').read_text() if (root / 'output').exists() else '',
                     (root / 'missing-header').exists())
@@ -103,6 +112,23 @@ fi
         self.assertTrue(uploaded)
         self.assertIn(f'uploaded_version={self.version}', output)
         self.assertFalse(missing_header)
+
+    def test_unpublished_series_uses_local_deps_without_missing_ppa(self):
+        result, uploaded, _, _ = self.run_build(has_series=False, local_repo=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(uploaded)
+        self.assertNotIn('ppa.launchpad.net', self.pbuilder_args)
+        self.assertIn(f'{self.series}-updates', self.pbuilder_args)
+        self.assertIn(f'{self.series}-security', self.pbuilder_args)
+        self.assertIn('deb [trusted=yes] file:', self.pbuilder_args)
+        self.assertIn('--bindmounts', self.pbuilder_args)
+
+    def test_published_series_keeps_signed_ppa(self):
+        result, uploaded, _, _ = self.run_build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(uploaded)
+        self.assertIn(f'[signed-by=/fixture/ppa.gpg] http://ppa.launchpad.net/test/test/ubuntu '
+                      f'{self.series} main', self.pbuilder_args)
 
     def test_inactive_version_appearing_during_build_aborts(self):
         result, uploaded, _, _ = self.run_build('Deleted')

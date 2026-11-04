@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - '.github/workflows/build-ppa.yml'
+      - '.github/workflows/build-series.yml'
       - '.github/actions/**'
       - 'scripts/**'
       - 'patches/**'
@@ -17,257 +18,26 @@ concurrency:
   group: ppa-upload
   cancel-in-progress: false
 
-env:
-  OWNER: ${{ vars.OWNER }}
-  PPA: ${{ vars.PPA }}
-  DEBEMAIL: ${{ vars.DEBEMAIL }}
-  DEBFULLNAME: ${{ vars.OWNER }}
-  DEBIAN_FRONTEND: noninteractive
-
+# One complete dependency chain per series. Serialize calls to preserve PPA
+# upload ordering; a failed series must not cancel the queued series.
 jobs:
-  stage1:
-    name: Stage 1 (${{ matrix.series }}, ${{ matrix.package }})
-    runs-on: ${{ matrix.runner }}
-    env:
-      SERIES: ${{ matrix.series }}
-    timeout-minutes: 60
+  build:
+    name: Build ${{ matrix.series }}
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
         series: [noble, resolute]
-        package: [librime, yoga, fcitx5-gtk]
         include:
           - series: noble
             runner: ubuntu-24.04
           - series: resolute
             runner: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-ppa-env
-        with:
-          gpg-key-id: ${{ secrets.GPG_KEY_ID }}
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          series: ${{ env.SERIES }}
-          owner: ${{ env.OWNER }}
-          ppa: ${{ env.PPA }}
-      - name: Resolve deb version
-        id: ver
-        run: |
-          chmod +x scripts/*.sh
-          scripts/resolve-deb-version.sh "${{ matrix.package }}"
-      - name: Cache own debs
-        uses: actions/cache@v6
-        with:
-          key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
-          path: ~/deb-cache/${{ matrix.package }}
-      - name: Build and upload
-        id: build
-        env:
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-        run: |
-          chmod +x scripts/*.sh
-          export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
-          scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Upload debs for downstream stages
-        uses: actions/upload-artifact@v7
-        with:
-          name: debs-${{ env.SERIES }}-${{ matrix.package }}
-          path: ~/deb-cache/${{ matrix.package }}/*.deb
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 7
-
-  stage2:
-    name: Stage 2 (${{ matrix.series }}, ${{ matrix.package }})
-    needs: stage1
-    runs-on: ${{ matrix.runner }}
-    env:
-      SERIES: ${{ matrix.series }}
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        series: [noble, resolute]
-        package: [fcitx5]
-        include:
-          - series: noble
-            runner: ubuntu-24.04
-          - series: resolute
-            runner: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-ppa-env
-        with:
-          gpg-key-id: ${{ secrets.GPG_KEY_ID }}
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          series: ${{ env.SERIES }}
-          owner: ${{ env.OWNER }}
-          ppa: ${{ env.PPA }}
-      - name: Resolve deb version (self)
-        id: ver
-        run: |
-          chmod +x scripts/*.sh
-          scripts/resolve-deb-version.sh "${{ matrix.package }}"
-      - name: Cache own debs
-        uses: actions/cache@v6
-        with:
-          key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
-          path: ~/deb-cache/${{ matrix.package }}
-      # Cross-stage handoff must use this run's outputs: an exact cache hit
-      # cannot be overwritten when the same Debian version is rebuilt as ppaN+1.
-      - name: Download upstream debs
-        uses: actions/download-artifact@v8
-        with:
-          pattern: debs-${{ env.SERIES }}-*
-          path: ${{ runner.temp }}/upstream-debs
-      - name: Build local apt repo
-        run: |
-          chmod +x scripts/*.sh
-          scripts/build-local-repo.sh "${{ runner.temp }}/upstream-debs" "${{ runner.temp }}/local-repo"
-      - name: Build and upload
-        id: build
-        env:
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-          LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
-        run: |
-          chmod +x scripts/*.sh
-          export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
-          scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Upload debs for downstream stages
-        uses: actions/upload-artifact@v7
-        with:
-          name: debs-${{ env.SERIES }}-${{ matrix.package }}
-          path: ~/deb-cache/${{ matrix.package }}/*.deb
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 7
-
-  stage3:
-    name: Stage 3 (${{ matrix.series }}, ${{ matrix.package }})
-    needs: stage2
-    runs-on: ${{ matrix.runner }}
-    env:
-      SERIES: ${{ matrix.series }}
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        series: [noble, resolute]
-        package: [libime, fcitx5-lua, fcitx5-qt, fcitx5-rime]
-        include:
-          - series: noble
-            runner: ubuntu-24.04
-          - series: resolute
-            runner: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-ppa-env
-        with:
-          gpg-key-id: ${{ secrets.GPG_KEY_ID }}
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          series: ${{ env.SERIES }}
-          owner: ${{ env.OWNER }}
-          ppa: ${{ env.PPA }}
-      - name: Resolve deb version (self)
-        id: ver
-        run: |
-          chmod +x scripts/*.sh
-          scripts/resolve-deb-version.sh "${{ matrix.package }}"
-      - name: Cache own debs
-        uses: actions/cache@v6
-        with:
-          key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
-          path: ~/deb-cache/${{ matrix.package }}
-      # Cross-stage handoff must use this run's outputs: an exact cache hit
-      # cannot be overwritten when the same Debian version is rebuilt as ppaN+1.
-      - name: Download upstream debs
-        uses: actions/download-artifact@v8
-        with:
-          pattern: debs-${{ env.SERIES }}-*
-          path: ${{ runner.temp }}/upstream-debs
-      - name: Build local apt repo
-        run: |
-          chmod +x scripts/*.sh
-          scripts/build-local-repo.sh "${{ runner.temp }}/upstream-debs" "${{ runner.temp }}/local-repo"
-      - name: Build and upload
-        id: build
-        env:
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-          LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
-        run: |
-          chmod +x scripts/*.sh
-          export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
-          scripts/build-and-upload.sh "${{ matrix.package }}"
-      - name: Upload debs for downstream stages
-        uses: actions/upload-artifact@v7
-        with:
-          name: debs-${{ env.SERIES }}-${{ matrix.package }}
-          path: ~/deb-cache/${{ matrix.package }}/*.deb
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 7
-
-  stage4:
-    name: Stage 4 (${{ matrix.series }}, ${{ matrix.package }})
-    needs: stage3
-    runs-on: ${{ matrix.runner }}
-    env:
-      SERIES: ${{ matrix.series }}
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        series: [noble, resolute]
-        package: [fcitx5-chinese-addons]
-        include:
-          - series: noble
-            runner: ubuntu-24.04
-          - series: resolute
-            runner: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-ppa-env
-        with:
-          gpg-key-id: ${{ secrets.GPG_KEY_ID }}
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          series: ${{ env.SERIES }}
-          owner: ${{ env.OWNER }}
-          ppa: ${{ env.PPA }}
-      - name: Resolve deb version (self)
-        id: ver
-        run: |
-          chmod +x scripts/*.sh
-          scripts/resolve-deb-version.sh "${{ matrix.package }}"
-      - name: Cache own debs
-        uses: actions/cache@v6
-        with:
-          key: debs-${{ matrix.package }}-${{ env.SERIES }}-${{ steps.ver.outputs.deb_version }}
-          path: ~/deb-cache/${{ matrix.package }}
-      # Cross-stage handoff must use this run's outputs: an exact cache hit
-      # cannot be overwritten when the same Debian version is rebuilt as ppaN+1.
-      - name: Download upstream debs
-        uses: actions/download-artifact@v8
-        with:
-          pattern: debs-${{ env.SERIES }}-*
-          path: ${{ runner.temp }}/upstream-debs
-      - name: Build local apt repo
-        run: |
-          chmod +x scripts/*.sh
-          scripts/build-local-repo.sh "${{ runner.temp }}/upstream-debs" "${{ runner.temp }}/local-repo"
-      - name: Build and upload
-        id: build
-        env:
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-          LOCAL_REPO_DIR: ${{ runner.temp }}/local-repo
-        run: |
-          chmod +x scripts/*.sh
-          export DEB_CACHE_DIR="$HOME/deb-cache/${{ matrix.package }}"
-          scripts/build-and-upload.sh "${{ matrix.package }}"
+    uses: ./.github/workflows/build-series.yml
+    with:
+      series: ${{ matrix.series }}
+      runner: ${{ matrix.runner }}
+    secrets:
+      GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

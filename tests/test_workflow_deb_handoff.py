@@ -13,13 +13,48 @@ import yaml
 
 
 WORKFLOW = Path(__file__).resolve().parents[1] / '.github/workflows/build-ppa.yml'
+PIPELINE = WORKFLOW.with_name('build-series.yml')
 
 
 class DebHandoffTest(unittest.TestCase):
+    def test_series_failures_have_separate_stage_dependencies(self):
+        workflow = yaml.safe_load(WORKFLOW.read_text())
+        calls = [j for j in workflow['jobs'].values() if 'uses' in j]
+        self.assertEqual(len(calls), 1, 'Each series needs its own four-stage workflow call')
+        call = calls[0]
+        self.assertNotIn('needs', call)
+        self.assertFalse(call['strategy']['fail-fast'])
+        self.assertEqual(call['strategy']['max-parallel'], 1)
+        self.assertEqual(call['strategy']['matrix']['series'], ['noble', 'resolute'])
+        self.assertEqual(call['with']['series'], '${{ matrix.series }}')
+        self.assertNotIn('continue-on-error', call)
+        pipeline = yaml.safe_load((WORKFLOW.parents[2] / call['uses'].removeprefix('./')).read_text())
+        for index in range(1, 5):
+            job = pipeline['jobs'][f'stage{index}']
+            self.assertNotIn('series', job['strategy']['matrix'],
+                             'A shared series matrix couples both distributions through needs')
+            self.assertEqual(job.get('needs'), f'stage{index - 1}' if index > 1 else None)
+            self.assertNotIn('if', job, 'Failed upstream builds must still block their own downstream')
+
     def test_each_series_uses_its_own_runner_cache_and_four_stages(self):
         workflow = yaml.safe_load(WORKFLOW.read_text())
-        self.assertNotIn('SERIES', workflow['env'])
         self.assertEqual(workflow['concurrency']['group'], 'ppa-upload')
+        self.assertFalse(workflow['concurrency']['cancel-in-progress'])
+        call = workflow['jobs']['build']
+        self.assertEqual(call['strategy']['matrix']['include'], [
+            {'series': 'noble', 'runner': 'ubuntu-24.04'},
+            {'series': 'resolute', 'runner': 'ubuntu-26.04'},
+        ])
+        self.assertEqual(call['with']['runner'], '${{ matrix.runner }}')
+        self.assertEqual(call['uses'], './.github/workflows/build-series.yml')
+        self.assertEqual(set(call['secrets']), {'GPG_KEY_ID', 'GPG_PRIVATE_KEY', 'GPG_PASSPHRASE'})
+        # PyYAML's YAML 1.1 loader reads the unquoted "on" key as True.
+        triggers = workflow.get('on', workflow.get(True))
+        self.assertIn('.github/workflows/build-series.yml', triggers['push']['paths'])
+        pipeline = yaml.safe_load(PIPELINE.read_text())
+        self.assertEqual(pipeline['env']['SERIES'], '${{ inputs.series }}')
+        self.assertNotIn('concurrency', pipeline,
+                         'A child concurrency group can cancel or deadlock its caller')
         expected = {
             'stage1': ['librime', 'yoga', 'fcitx5-gtk'],
             'stage2': ['fcitx5'],
@@ -27,19 +62,14 @@ class DebHandoffTest(unittest.TestCase):
             'stage4': ['fcitx5-chinese-addons'],
         }
         for index, (name, packages) in enumerate(expected.items(), start=1):
-            job = workflow['jobs'][name]
+            job = pipeline['jobs'][name]
             self.assertEqual(job.get('needs'), f'stage{index - 1}' if index > 1 else None)
             self.assertEqual(job['strategy']['max-parallel'], 1)
             self.assertFalse(job['strategy']['fail-fast'])
             matrix = job['strategy']['matrix']
-            self.assertEqual(matrix['series'], ['noble', 'resolute'])
+            self.assertNotIn('series', matrix)
             self.assertEqual(matrix['package'], packages)
-            self.assertEqual(matrix['include'], [
-                {'series': 'noble', 'runner': 'ubuntu-24.04'},
-                {'series': 'resolute', 'runner': 'ubuntu-26.04'},
-            ])
-            self.assertEqual(job['runs-on'], '${{ matrix.runner }}')
-            self.assertEqual(job['env']['SERIES'], '${{ matrix.series }}')
+            self.assertEqual(job['runs-on'], '${{ inputs.runner }}')
             setup = next(s for s in job['steps']
                          if s.get('uses') == './.github/actions/setup-ppa-env')
             self.assertEqual(setup['with']['series'], '${{ env.SERIES }}')
@@ -54,7 +84,7 @@ class DebHandoffTest(unittest.TestCase):
         self.assertEqual(cache['with']['restore-keys'].strip(), 'pbuilder-${{ inputs.series }}-')
 
     def test_rebuilt_revision_reaches_next_stage_despite_old_cache(self):
-        jobs = yaml.safe_load(WORKFLOW.read_text())['jobs']
+        jobs = yaml.safe_load(PIPELINE.read_text())['jobs']
         cases = [(series, upstream, downstream)
                  for series in ['noble', 'resolute']
                  for upstream, downstream in [('stage1', 'stage2'),

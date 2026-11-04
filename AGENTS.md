@@ -35,9 +35,9 @@ Debian sid 版本 `X` → PPA 版本 `X~<series>1~ppa1` (series 为 noble 或 re
 4. `dch` 生成 changelog 条目, `debuild -S -sa -k$GPG_KEY_ID` 生成签名源码包
 5. **pbuilder 本地测试编译** (含 A-hook 依赖版本校验), 缓存 chroot 到 `actions/cache@v4` (key 含 run_id 强制每天刷新, restore-key 前缀匹配复用)
 6. `dput ppa:$OWNER/$PPA` 上传
-7. 轮询 Launchpad API (`getPublishedSources` → `getBuilds` → `getPublishedBinaries`), 状态全 `Published` 才算 stage 完成. 超时 7200s (120 min).
+7. 将本次 run 的 deb artifact 交给后续 stage，建立本地 apt repo；下游编译无需等 Launchpad 发布。
 
-Stage 通过 `needs:` 串行, `fail-fast: false` + `max-parallel: 1` 保 dput 顺序. Job 之一失败 → 后续 stage 不启动 (符合预期, 保护下游).
+`build-ppa.yml` 用 series matrix 调用 `build-series.yml`，每个调用只包含单个发行版。子流程的四个 stage 通过 `needs:` 串行；失败只阻止同一发行版的下游。入口和每阶段均使用 `fail-fast: false` + `max-parallel: 1`，保留上传顺序且不取消另一发行版。入口的 `concurrency: ppa-upload` 防止跨 run 并发。修改时同步维护 [README 的构建策略](README.md#构建策略) 和依赖链回归测试。
 
 ## 依赖版本一致性校验 (关键)
 
@@ -90,6 +90,7 @@ Stage 通过 `needs:` 串行, `fail-fast: false` + `max-parallel: 1` 保 dput �
 - 从 `keyserver.ubuntu.com` 下载 dearmor 到 `/etc/apt/keyrings/ppa-<owner>-<ppa>.gpg`
 - pbuilderrc 用 `deb [signed-by=...]` + `BINDMOUNTS` 让 chroot 内可见 keyring
 - **首次空 PPA 无 signing key** 降级 `ALLOWUNTRUSTED=yes` 完成 bootstrap, 之后自动切换正常鉴权
+- **已有 key 但目标 series 无索引**：检查该 series 的 Release，只有明确 404 时省略 PPA mirror；create/update 均只用 Ubuntu 和本次 run 的 local repo。200 恢复 PPA，其他 HTTP/网络错误阻断；见 `scripts/check-ppa-series.sh`。
 
 ## GitHub 配置
 
@@ -121,7 +122,8 @@ Stage 通过 `needs:` 串行, `fail-fast: false` + `max-parallel: 1` 保 dput �
 ## 文件结构
 
 ```
-.github/workflows/build-ppa.yml       # 4 stage matrix workflow
+.github/workflows/build-ppa.yml       # series matrix 调用入口
+.github/workflows/build-series.yml    # 单个 series 的 4 stage package matrix
 .github/actions/setup-ppa-env/        # composite: apt/gpg/pbuilder chroot
 scripts/build-and-upload.sh           # 单包: 拉源→dch→debuild→pbuilder(带A-hook)→dput
 scripts/get-ppa-version.sh            # Launchpad API 查 PPA 已发布最新版本
@@ -142,7 +144,7 @@ debian-patches/{common,<series>}/<pkg>/*.patch          # debian/ 目录 patch (
 3. 复核方式: 抓 9 个包的 `debian/control`, `grep '^Build-Depends'` 找 `-dev` / `libfcitx5*` / `libime*` / `libyoga*` / `librime*` / `fcitx5-modules*` / `fcitx5-module-*`
 
 **Ubuntu 新 series**:
-- 更新四个 stage 的 `matrix.series` 和对应 runner 映射；各 series 使用独立 pbuilder chroot、cache key 和 artifact 下载 pattern。
+- 更新入口 `build-ppa.yml` 的 `matrix.series` 和 runner 映射；复用单个 series 子流程，保持 stage 的 needs 不跨发行版。各 series 使用独立 pbuilder chroot、cache key 和 artifact 下载 pattern。
 - 核对目标发行版依赖版本，将仍需的改动放入公共或对应 series patch 目录，并更新离线样本/回归测试及 README 的证据记录。
 - Launchpad PPA settings 允许对应 series build。
 

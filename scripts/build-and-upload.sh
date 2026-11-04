@@ -197,11 +197,15 @@ echo "::group::pbuilder test build ${PKG} ${NEW_VERSION}"
 BUILDRESULT="$WORKDIR/buildresult"
 mkdir -p "$BUILDRESULT"
 
-if [[ "${PPA_ALLOW_UNTRUSTED:-yes}" == "no" && -n "${PPA_KEYRING:-}" ]]; then
-  OTHER_MIRROR="deb http://archive.ubuntu.com/ubuntu ${SERIES}-updates main universe | deb http://archive.ubuntu.com/ubuntu ${SERIES}-security main universe | deb [signed-by=${PPA_KEYRING}] http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main"
+OTHER_MIRROR="deb http://archive.ubuntu.com/ubuntu ${SERIES}-updates main universe | deb http://archive.ubuntu.com/ubuntu ${SERIES}-security main universe"
+if [[ "${PPA_HAS_SERIES:-true}" == "false" ]]; then
+  # 首次发布该发行版时还没有 Release，依赖通过同次 run 的 local repo 传递。
+  UNTRUSTED_ARGS=()
+elif [[ "${PPA_ALLOW_UNTRUSTED:-yes}" == "no" && -n "${PPA_KEYRING:-}" ]]; then
+  OTHER_MIRROR+=" | deb [signed-by=${PPA_KEYRING}] http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main"
   UNTRUSTED_ARGS=()
 else
-  OTHER_MIRROR="deb http://archive.ubuntu.com/ubuntu ${SERIES}-updates main universe | deb http://archive.ubuntu.com/ubuntu ${SERIES}-security main universe | deb http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main"
+  OTHER_MIRROR+=" | deb http://ppa.launchpad.net/${OWNER}/${PPA}/ubuntu ${SERIES} main"
   UNTRUSTED_ARGS=(--allow-untrusted)
 fi
 
