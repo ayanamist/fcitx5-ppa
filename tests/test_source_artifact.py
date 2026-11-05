@@ -159,6 +159,49 @@ class SourceArtifactTest(unittest.TestCase):
             action = next(s for s in steps if s.get('name') == name)
             self.assertEqual(action['if'], "steps.plan.outputs.upload_required == 'true'")
 
+    def test_single_flat_download_runs_the_workflow_plan_for_both_series(self):
+        workflow = yaml.safe_load((ROOT / '.github/workflows/build-stage.yml').read_text())
+        step = next(s for s in workflow['jobs']['upload']['steps']
+                    if s.get('name') == 'Validate upload plan')
+        for series in ['noble', 'resolute']:
+            with self.subTest(series=series):
+                runner = self.root / series
+                # download-artifact@v8 flattens a sole pattern match, even with
+                # merge-multiple false. Stage 2 and Stage 4 each match one artifact.
+                SOURCE.skip(runner / 'source-uploads', 'fcitx5', series, '5.1.23-1',
+                            f'5.1.23-1~{series}1~ppa1')
+                env = dict(os.environ, RUNNER_TEMP=str(runner), SERIES=series, STAGE='2',
+                           PACKAGES='["fcitx5"]', GITHUB_OUTPUT=str(runner / 'output'))
+                result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', step['run']],
+                                        cwd=ROOT, env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(json.loads((runner / 'upload-plan.json').read_text()), [])
+                self.assertEqual((runner / 'output').read_text(), 'upload_required=false\n')
+
+    def test_single_signed_source_accepts_flat_and_named_downloads(self):
+        self.prepare()
+        flat_plan = SOURCE.plan(self.output, 'resolute', '2', '["test"]')
+        self.assertEqual([entry['package'] for entry in flat_plan], ['test'])
+        self.assertEqual(flat_plan[0]['directory'], str(self.output))
+        named_root = self.root / 'named-download'
+        nested = named_root / 'source-resolute-stage2-test'
+        shutil.copytree(self.output, nested)
+        named_plan = SOURCE.plan(named_root, 'resolute', '2', '["test"]')
+        self.assertEqual([entry['package'] for entry in named_plan], ['test'])
+        self.assertEqual(named_plan[0]['directory'], str(nested))
+
+    def test_flat_download_cannot_hide_missing_packages_or_invalid_metadata(self):
+        self.prepare()
+        with self.assertRaises(FileNotFoundError):
+            SOURCE.plan(self.output, 'resolute', '2', '["test", "missing"]')
+        for series, packages in [('noble', '["test"]'), ('resolute', '["wrong"]')]:
+            with self.subTest(series=series, packages=packages):
+                with self.assertRaisesRegex(ValueError, 'Wrong source package or series'):
+                    SOURCE.plan(self.output, series, '2', packages)
+        (self.output / self.orig.name).write_bytes(b'corrupt')
+        with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+            SOURCE.plan(self.output, 'resolute', '2', '["test"]')
+
     def test_stage_plan_preserves_package_order(self):
         self.prepare()
         shutil.move(self.output, self.root / 'source-resolute-stage1-test')

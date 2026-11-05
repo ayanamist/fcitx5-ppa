@@ -134,6 +134,12 @@ def plan(directory, series, stage, packages):
         if not isinstance(package, str) or not re.fullmatch(r'[a-z0-9][a-z0-9+.-]+', package):
             raise ValueError('Invalid source package name')
         source = Path(directory) / f'source-{series}-stage{stage}-{package}'
+        # download-artifact@v8 extracts a single pattern match directly to
+        # path, even when merge-multiple is false. Never use this fallback
+        # for a multi-package stage, where missing artifacts must still fail.
+        if (len(packages) == 1 and not (source / 'source-upload.json').is_file()
+                and (Path(directory) / 'source-upload.json').is_file()):
+            source = Path(directory)
         data = validate(source, package, series)
         if data['upload_required']:
             result.append({'directory': str(source), **data})
