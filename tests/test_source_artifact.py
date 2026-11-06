@@ -252,7 +252,8 @@ printf '%s\\n' "$2" >> "$FIXTURE/upload-order"
         mocks = self.root / 'bin'
         mocks.mkdir()
         commands = {
-            'apt-get': 'mkdir test-1.0',
+            'apt-get': '''mkdir -p test-1.0/debian
+printf 'Source: test\\nBuild-Depends: cmake\\n' > test-1.0/debian/control''',
             'dpkg-parsechangelog': 'echo 1.0-1',
             'dch': 'true',
             'debuild': 'cp "$FIXTURE"/test_* ..',

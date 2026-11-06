@@ -16,7 +16,7 @@ class PreuploadCheckTest(unittest.TestCase):
         return f'5.1.15-1~{self.series}1~ppa1'
 
     def run_build(self, status=None, fail=False, initial_failures=0, final_failures=0,
-                  has_series=True, local_repo=False):
+                  has_series=True, local_repo=True, missing_deps=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             entries = [] if status is None else [{
@@ -24,7 +24,8 @@ class PreuploadCheckTest(unittest.TestCase):
                 'distro_series_link': f'https://api.launchpad.net/1.0/ubuntu/{self.series}'}]
             (root / 'response').write_text(json.dumps({'entries': entries}))
             mocks = {
-                'apt-get': 'mkdir fcitx5-qt-5.1.15',
+                'apt-get': '''mkdir -p fcitx5-qt-5.1.15/debian
+printf 'Source: fcitx5-qt\\nBuild-Depends: libfcitx5utils-dev (>= 5.1.14-4~)\\n\\nPackage: fixture\\nArchitecture: any\\n' > fcitx5-qt-5.1.15/debian/control''',
                 'dpkg-parsechangelog': 'echo 5.1.15-1',
                 'curl': '''
 case "$*" in *'Cache-Control: no-cache'*) ;; *) touch "$FIXTURE/missing-header";; esac
@@ -45,8 +46,14 @@ else
 fi
 ''',
                 'dch': 'true',
-                'debuild': f'touch ../fcitx5-qt_{self.version}.dsc ../fcitx5-qt_{self.version}_source.changes',
-                'sudo': 'printf "%s\\n" "$*" >> "$FIXTURE/pbuilder-args"; touch "$FIXTURE/built"',
+                'debuild': f'cp debian/control "$FIXTURE/signed-control"; '
+                           f'touch ../fcitx5-qt_{self.version}.dsc ../fcitx5-qt_{self.version}_source.changes',
+                'sudo': '''printf "%s\\n" "$*" >> "$FIXTURE/pbuilder-args"
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --hookdir ]; then cp "$2/A50verify-deps" "$FIXTURE/hook"; fi
+  shift
+done
+touch "$FIXTURE/built"''',
                 'dput': 'touch "$FIXTURE/uploaded"',
             }
             for name, body in mocks.items():
@@ -55,7 +62,9 @@ fi
                 path.chmod(0o755)
             repo = root / 'local-repo'
             repo.mkdir()
-            (repo / 'Packages').touch()
+            (repo / 'Packages').write_text(
+                '' if missing_deps else f'Package: libfcitx5utils-dev\nSource: fcitx5\n'
+                f'Version: 5.1.23-1~{self.series}1~ppa1\nArchitecture: amd64\n\n')
             env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}',
                        FIXTURE=str(root), FAIL_QUERY='yes' if fail else 'no',
                        INITIAL_FAILURES=str(initial_failures), FINAL_FAILURES=str(final_failures),
@@ -69,6 +78,8 @@ fi
                                      'fcitx5-qt'], env=env, capture_output=True, text=True)
             args = root / 'pbuilder-args'
             self.pbuilder_args = args.read_text() if args.exists() else ''
+            self.signed_control = (root / 'signed-control').read_text() if (root / 'signed-control').exists() else ''
+            self.hook = (root / 'hook').read_text() if (root / 'hook').exists() else ''
             return (result, (root / 'uploaded').exists(),
                     (root / 'output').read_text() if (root / 'output').exists() else '',
                     (root / 'missing-header').exists())
@@ -112,6 +123,24 @@ fi
         self.assertTrue(uploaded)
         self.assertIn(f'uploaded_version={self.version}', output)
         self.assertFalse(missing_header)
+
+    def test_source_and_hook_share_dependency_floor(self):
+        result, uploaded, _, _ = self.run_build()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(uploaded)
+        floor = '5.1.23'
+        self.assertIn(f'libfcitx5utils-dev (>= {floor})', self.signed_control)
+        self.assertIn(f'check libfcitx5utils-dev {floor}', self.hook)
+
+    def test_missing_dependency_artifacts_stop_before_signing_or_upload(self):
+        for kwargs in ({'local_repo': False}, {'missing_deps': True}):
+            with self.subTest(**kwargs):
+                result, uploaded, output, _ = self.run_build(**kwargs)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(uploaded)
+                self.assertEqual(self.signed_control, '')
+                self.assertEqual(self.pbuilder_args, '')
+                self.assertNotIn('skipped=false', output)
 
     def test_unpublished_series_uses_local_deps_without_missing_ppa(self):
         result, uploaded, _, _ = self.run_build(has_series=False, local_repo=True)

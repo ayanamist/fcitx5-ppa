@@ -15,7 +15,7 @@ Stage 3 (需 fcitx5[+librime]):    libime, fcitx5-lua, fcitx5-qt, fcitx5-rime
 Stage 4 (需 fcitx5+libime+lua+qt): fcitx5-chinese-addons
 ```
 
-依赖真相由 `scripts/deps.map` 记录, 用 pbuilder A-hook 校验编译时实际 `-dev` 版本. Debian upstream 若改 Build-Depends 必须人工更新此表. 复核方式: `https://sources.debian.org/src/<pkg>/sid/debian/control/`.
+依赖真相由 `scripts/deps.map` 记录；`scripts/pin-build-deps.py` 按同次 run 的上游版本提高源码 Build-Depends，pbuilder A-hook 使用同一下限校验实际安装版本。Debian upstream 若改 Build-Depends 必须人工更新此表，并更新九包元数据样本验证映射完整性；见 [样本说明](tests/fixtures/debian-sid/README.md)。
 
 **已知细节**:
 - `fcitx5-gtk` 只依赖 gtk/glib/x11, 不依赖 fcitx5 本体, 属 leaf
@@ -32,7 +32,7 @@ Debian sid 版本 `X` → PPA 版本 `X~<series>1~ppa1` (series 为 noble 或 re
 1. `apt-get source <pkg>` 拉 sid 源码 (workflow 在 apt sources 加 `deb-src http://deb.debian.org/debian sid main` + apt pin `-1` 阻止拉 Debian 二进制)
 2. `dpkg-parsechangelog -SVersion` 拿 Debian 版本
 3. Launchpad REST API 查 PPA 现有版本, 计算 `~ppaN`
-4. `dch` 生成 changelog 条目, `debuild -S -sa -k$GPG_KEY_ID` 生成签名源码包
+4. 应用公共/发行版 patch 后，`pin-build-deps.py` 提高内部构建依赖下限；`dch` 生成 changelog 条目，`debuild -S -sa -k$GPG_KEY_ID` 生成签名源码包
 5. **pbuilder 本地测试编译** (含 A-hook 依赖版本校验), 缓存 chroot 到 `actions/cache@v4` (key 含 run_id 强制每天刷新, restore-key 前缀匹配复用)
 6. `dput ppa:$OWNER/$PPA` 上传
 7. 将本次 run 的 deb artifact 交给后续 stage，建立本地 apt repo；下游编译无需等 Launchpad 发布。
@@ -47,14 +47,18 @@ Debian sid 版本 `X` → PPA 版本 `X~<series>1~ppa1` (series 为 noble 或 re
 
 **问题**: pbuilder 装 build-dep 时可能因 apt cache/mirror 时序拿到旧版 `-dev` header, 编出的二进制 ABI 与 PPA 上传的新库不匹配.
 
-**方案**: pbuilder A-hook (装完 build-dep 后, build 前运行) 里 `dpkg-query` 查每个关键 `-dev` 实际版本, 与 PPA 上游最新版本比较 (`dpkg --compare-versions`), 不足即 fail step, 不上传.
+**方案**: 签名前按 `deps.map` 从 `LOCAL_REPO_DIR/Packages` 读取同次 run 交接的版本，提高源码 `Build-Depends{,-Arch,-Indep}` 下限。动态下限仅取上游版本（如 `1.1.17`），去掉 Debian revision 和 PPA 后缀，保留 epoch、预发布和 repack 标识；上游已声明的更严格要求继续保留。版本记录到临时 JSON，pbuilder A-hook 在安装 build-dep 后读取相同下限，通过 `dpkg-query` 和 `dpkg --compare-versions` 校验，不足即 fail，不上传。Launchpad 无法再使用旧上游版本通过依赖检查，但可使用相同上游版本的其他打包修订。
 
 **注意**: **必须 A-hook 不能 D-hook**. D-hook 在 build-dep 装**之前**触发, dpkg-query 全空 → 全部 skip, 校验形同虚设.
 
 **跳过场景**:
-- 上游包在 PPA 无版本 (首次 bootstrap) → warning 跳过
-- Build-Depends 未列该 dev 包 (dpkg-query 空) → warning 跳过
-- 均不阻塞
+- `deps.map` 条目已不在 Build-Depends 中 → warning 跳过该条目，维护时同步修表
+- 架构/profile 限制使依赖未安装 (`dpkg-query` 空) → A-hook warning 跳过
+- 已声明的内部依赖缺少本地 repo、必要二进制或来源/series 不匹配 → 签名前失败；首次 bootstrap 同样使用本次 run 的产物，不依赖 PPA 已发布
+
+每次新准备源码动态提高下限，已有活动版本继续按版本幂等规则复用。验证运行 `bash scripts/test.sh`；`tests/test_pin_build_deps.py` 覆盖九包内部依赖、真实 `.dsc` 生成和旧版本拒绝，样本来源见 [样本说明](tests/fixtures/debian-sid/README.md)。
+
+**故障背景（2026-11-06 核实）**：[Actions run 42039464880](https://github.com/ayanamist/fcitx5-ppa/actions/runs/42039464880) 的 chinese-addons 5.1.15 使用本地产物 libime 1.1.17 编译成功，而 [Launchpad build 33916331](https://launchpad.net/~ayanamist/+archive/ubuntu/fcitx5/+build/33916331) 使用满足旧依赖声明的 1.1.14，缺少 `HistoryBigram::WordWithCode` 导致失败。源码 publication 的 `Published`、编译日志的成功均不能证明二进制已发布；当前 Actions 以本地验证和源码上传结果判定成功，未等待 Launchpad 最终构建结果。
 
 ## 发行版适配 patch
 
@@ -131,6 +135,7 @@ Debian sid 版本 `X` → PPA 版本 `X~<series>1~ppa1` (series 为 noble 或 re
 .github/workflows/build-stage.yml     # 包并行构建 + stage upload 锁
 .github/actions/setup-ppa-env/        # composite: apt/gpg/pbuilder chroot
 scripts/build-and-upload.sh           # 单包: 拉源→dch→debuild→pbuilder(带A-hook)→dput
+scripts/pin-build-deps.py              # 签名前提高内部 Build-Depends，生成 A-hook 共用下限
 scripts/get-ppa-version.sh            # Launchpad API 查 PPA 已发布最新版本
 scripts/deps.map                      # PPA 内依赖映射, 校验用
 patches/{common,<series>}/<pkg>/*.patch                 # 上游源码 quilt patch (CMakeLists.txt 等, orig.tar.xz 里的文件)
@@ -169,7 +174,7 @@ debian-patches/{common,<series>}/<pkg>/*.patch          # debian/ 目录 patch (
 
 **dput 失败 "Unauthorized"**: GPG key 未加到 Launchpad / key 未确认 / `GPG_KEY_ID` 与 Launchpad 上的 key 不匹配.
 
-**pbuilder A-hook fail**: hook 输出 "installed=X expected>=Y". 说明前 stage 上传成功但 apt cache 未刷新到. 检查 stage 之间 Launchpad 是否真等到 `Published` (含二进制).
+**pbuilder A-hook fail**: hook 输出 "installed=X expected>=Y"。核对本次 run 的 local repo 是否含所需版本、pbuilder 是否正确挂载，以及上游是否已有更严格要求。Launchpad 的依赖就绪需另查目标架构二进制发布状态。
 
 **首轮 PPA 空 bootstrap**: `Fetch PPA signing key` 步骤会写 `PPA_ALLOW_UNTRUSTED=yes`, 允许 chroot 拉未签名 PPA. 至少一个包上传+publish 后此路径消失.
 
@@ -186,12 +191,14 @@ debian-patches/{common,<series>}/<pkg>/*.patch          # debian/ 目录 patch (
 
 - **只上传源码包让 Launchpad 编译二进制**: PPA 通常拒二进制 upload, 且 Launchpad 有 arm64/riscv64 build farm 支持多架构 — 本地 GH runner 只有 amd64.
 - **`~noble1~ppa1` 后缀而非 `ubuntu1~noble1~ppa1`**: 前者更简洁, 保 Debian 原始 revision (`-1`) 语义清晰. `~` 在 dpkg 版本比较里小于任何字符, 保证 upstream 未来发新版时能正常覆盖.
-- **不做主动 no-change rebuild** (依赖 bump 触发): 相信 Debian maintainer 处理 SONAME/ABI. 用 D-hook 兜底检测 pbuilder 编译期版本一致性.
+- **不做主动 no-change rebuild** (依赖 bump 触发): 已有活动版本保持幂等；新准备的源码按本次 run 依赖版本提高下限，A-hook 校验本地实际安装版本。
 - **独立 stage upload job**: dput 上传同一 PPA 时必须串行；构建可并行。stage 内按 package 列表顺序上传，发行版间由同一 PPA 锁协调。
 - **pbuilder 而非 sbuild**: pbuilder 在 GH Actions 上启动更快, sbuild 需 schroot 配置更繁琐. 精度差别对本场景不显著.
 - **chroot cache key 含 run_id + restore prefix**: 每次 workflow 建独立 cache 但可复用旧, 保证 base.tgz 每天至少刷一次 apt cache.
 
 ## AI 协作规范
+
+**README 范围**：保持对外项目说明；内部实现细节、排错过程、具体 run/build 记录和验证命令放在维护指南或对应测试说明中。
 
 **修改后测试**：修改 `scripts/`、打包 patch、workflow 或测试代码后，交付或 commit 前必须在仓库根目录运行 `bash scripts/test.sh`，全部通过后才能宣告完成。行为变更需同步补充或更新回归测试，覆盖版本幂等、失败重试、缓存完整性和上传判定中受影响的场景；测试失败必须修复，不能通过删除或弱化断言绕过。依赖缺失时先安装测试所需的 `python3-yaml`、`apt-utils`、`jq` 和 `dpkg-dev`；无法运行时明确报告阻塞，不能声称通过。测试在开发修改后本地执行。
 

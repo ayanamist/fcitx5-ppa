@@ -1,0 +1,47 @@
+{
+  "fcitx5": {
+    "Version": "5.1.23-1",
+    "Binary": "fcitx5, fcitx5-data, fcitx5-frontend-all, fcitx5-modules, fcitx5-modules-dev, libfcitx5config-dev, libfcitx5config6, libfcitx5core-dev, libfcitx5core7, libfcitx5utils-dev, libfcitx5utils2",
+    "Build-Depends": "appstream, cmake (>= 3.13), dbus-daemon <!nocheck>, debhelper-compat (= 14), dh-exec, extra-cmake-modules, gettext, iso-codes, libbrotli-dev, libcairo2-dev, libdbus-1-dev [!linux-any], libegl1-mesa-dev, libenchant-2-dev, libevent-dev [!linux-any], libexpat1-dev, libfmt-dev, libgdk-pixbuf-2.0-dev, nlohmann-json3-dev, libpango1.0-dev, librsvg2-dev, libsystemd-dev [linux-any], libuv1-dev [!linux-any], libwayland-bin [linux-any], libwayland-dev [linux-any], libwayland-egl-backend-dev [linux-any], libxcb-ewmh-dev, libxcb-icccm4-dev, libxcb-imdkit-dev (>= 1.0.5~), libxcb-randr0-dev, libxcb-shape0-dev, libxcb-xfixes0-dev, libxcb-xinerama0-dev, libxcb-xkb-dev, libxcb1-dev, libxkbcommon-x11-dev, libxkbfile-dev, libyoga-dev, pkgconf, plasma-wayland-protocols (>= 1.20), unicode-cldr-core, uuid-dev, wayland-protocols [linux-any]"
+  },
+  "fcitx5-chinese-addons": {
+    "Version": "5.1.15-1",
+    "Binary": "fcitx5-chinese-addons, fcitx5-chinese-addons-bin, fcitx5-chinese-addons-data, fcitx5-module-chttrans, fcitx5-module-cloudpinyin, fcitx5-module-cloudpinyin-dev, fcitx5-module-fullwidth, fcitx5-module-pinyinhelper, fcitx5-module-pinyinhelper-dev, fcitx5-module-punctuation, fcitx5-module-punctuation-dev, fcitx5-pinyin, fcitx5-pinyin-gui, fcitx5-table",
+    "Build-Depends": "appstream, cmake (>= 3.6.0), debhelper-compat (= 14), extra-cmake-modules, fcitx5-module-lua-dev, fcitx5-modules-dev (>= 5.1.22~), gettext, libboost-json-dev, libcurl4-openssl-dev | libcurl-dev, libfcitx5-qt6-dev, libfcitx5config-dev (>= 5.1.20~), libfcitx5core-dev (>= 5.1.20~), libfcitx5utils-dev (>= 5.1.20~), libime-bin (>= 1.1.14), libimecore-dev (>= 1.1.14), libimepinyin-dev (>= 1.1.14), libimetable-dev (>= 1.1.14), libopencc-dev (>= 1.1.9~), nlohmann-json3-dev, pkgconf, qt6-base-dev, qt6-webengine-dev [amd64 arm64 armhf i386 mips64el]"
+  },
+  "fcitx5-gtk": {
+    "Version": "5.1.7-2",
+    "Binary": "fcitx5-frontend-gtk2, fcitx5-frontend-gtk3, fcitx5-frontend-gtk4, gir1.2-fcitxg-1.0, libfcitx5gclient-dev, libfcitx5gclient2",
+    "Build-Depends": "debhelper-compat (= 13), dh-sequence-gir, cmake, extra-cmake-modules, gir1.2-gio-2.0-dev <!nogir>, gir1.2-glib-2.0-dev <!nogir>, gir1.2-gobject-2.0-dev <!nogir>, gobject-introspection (>= 1.80) <!nogir>, libbrotli-dev, libfmt-dev, libglib2.0-dev, libgtk-3-dev, libgtk-4-dev, libgtk2.0-dev, libx11-dev, libxkbcommon-dev, libxkbcommon-x11-dev, pkgconf"
+  },
+  "fcitx5-lua": {
+    "Version": "5.0.18-1",
+    "Binary": "fcitx5-module-lua, fcitx5-module-lua-common, fcitx5-module-lua-dev",
+    "Build-Depends": "appstream, cmake, debhelper-compat (= 14), extra-cmake-modules, fcitx5-modules-dev (>= 5.1.14-4~), gettext, libfcitx5core-dev (>= 5.1.14-4~), liblua5.3-dev, pkgconf"
+  },
+  "fcitx5-qt": {
+    "Version": "5.1.16-1",
+    "Binary": "fcitx5-frontend-qt5, fcitx5-frontend-qt6, libfcitx5-qt-data, libfcitx5-qt-dev, libfcitx5-qt1, libfcitx5-qt6-1, libfcitx5-qt6-dev",
+    "Build-Depends": "cmake, debhelper-compat (= 13), extra-cmake-modules, gettext, libfcitx5utils-dev (>= 5.1.14-4~), libxcb1-dev, libxkbcommon-dev, qt6-base-dev, qt6-base-private-dev, qt6-wayland [linux-any], qt6-wayland-dev [linux-any], qt6-wayland-private-dev [linux-any], qtbase5-dev, qtbase5-private-dev"
+  },
+  "fcitx5-rime": {
+    "Version": "5.1.16-1",
+    "Binary": "fcitx5-rime",
+    "Build-Depends": "appstream, cmake, debhelper-compat (= 13), extra-cmake-modules, fcitx5-modules-dev (>= 5.1.22~), gettext, libfcitx5core-dev (>= 5.1.22~), librime-data, librime-dev (>= 1.16), pkgconf"
+  },
+  "libime": {
+    "Version": "1.1.17-1",
+    "Binary": "libime-bin, libime-data, libime-data-language-model, libimecore-dev, libimecore0, libimepinyin-dev, libimepinyin0, libimetable-dev, libimetable0",
+    "Build-Depends": "cmake (>= 3.12), debhelper-compat (= 13), extra-cmake-modules, libboost-dev (>= 1.61), libboost-iostreams-dev (>= 1.61), libdouble-conversion-dev (>= 3.1.5-5~), libfcitx5utils-dev (>= 5.1.20~), libzstd-dev, pkgconf"
+  },
+  "librime": {
+    "Version": "1.17.0+dfsg2-3",
+    "Binary": "librime-bin, librime-dev, librime-plugin-charcode, librime-plugin-lua, librime-plugin-octagram, librime-plugin-predict, librime1t64",
+    "Build-Depends": "dpkg-dev (>= 1.22.5), capnproto, cmake (>= 3.12), debhelper-compat (= 13), googletest <!nocheck>, libboost-dev, libboost-locale-dev, libboost-regex-dev, libcapnp-dev, libgoogle-glog-dev, libleveldb-dev, liblua5.4-dev, libmarisa-dev (>> 0.3), libopencc-dev (>= 1.1.9+ds1-3~), libutfcpp-dev (>= 3.2.4), libxcb-keysyms1-dev, libyaml-cpp-dev (>= 0.6.3-7~), pkgconf, x11proto-core-dev, zlib1g-dev"
+  },
+  "yoga": {
+    "Version": "3.2.1+ds-3",
+    "Binary": "libyoga-dev",
+    "Build-Depends": "debhelper-compat (= 13), cmake, googletest <!nocheck>"
+  }
+}

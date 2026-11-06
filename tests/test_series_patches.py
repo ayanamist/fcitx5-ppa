@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 import unittest
 
+from build_deps_fixture import local_packages
+
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / 'tests/fixtures/debian-sid'
 
@@ -25,10 +27,14 @@ class SeriesPatchesTest(unittest.TestCase):
                 path.write_text('#!/bin/sh\n' + body + '\n')
                 path.chmod(0o755)
             output = root / 'patched'
+            repo = root / 'repo'
+            repo.mkdir()
+            (repo / 'Packages').write_text(local_packages(series))
             env = dict(os.environ, PATH=f'{root}:{os.environ["PATH"]}',
                        SOURCE_FIXTURE=str(FIXTURES / package), PACKAGE=package,
                        PATCHED_SOURCE=str(output), OWNER='test', PPA='test',
                        SERIES=series, GPG_KEY_ID='test', GITHUB_WORKSPACE=str(ROOT),
+                       LOCAL_REPO_DIR=str(repo),
                        DEBFULLNAME='Test', DEBEMAIL='test@example.org')
             result = subprocess.run(['bash', str(ROOT / 'scripts/build-and-upload.sh'),
                                      package], env=env, capture_output=True, text=True)

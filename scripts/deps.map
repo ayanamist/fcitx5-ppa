@@ -1,6 +1,7 @@
 # 依赖映射: <package> <dev-binary-package>:<upstream-source-package> ...
 # 数据来源: https://sources.debian.org/src/<pkg>/sid/debian/control/ (2026-07 抓取)
-# pbuilder D-hook 会检查 chroot 内 <dev-binary-package> 版本是否 >= PPA 中 <upstream-source-package> 最新版本
+# pin-build-deps.py 从同次 run 的本地 repo 读取版本，按上游版本提升源码 Build-Depends。
+# pbuilder A-hook 复用相同下限；动态下限保留 epoch，去掉 Debian revision 和 PPA 后缀。
 # 无 PPA 内依赖的包不出现在此文件 (fcitx5-gtk / librime / yoga)
 fcitx5 libyoga-dev:yoga
 fcitx5-lua libfcitx5core-dev:fcitx5 fcitx5-modules-dev:fcitx5

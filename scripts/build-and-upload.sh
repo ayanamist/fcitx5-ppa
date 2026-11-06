@@ -119,6 +119,12 @@ for PATCH_SCOPE in common "$SERIES"; do
   done
 done
 
+# 按本次 run 交接的上游版本提高源码依赖下限，让 Launchpad 同样拒绝旧依赖。
+# 必须在 debuild 签名前执行；A-hook 复用相同的版本，不再另查 PPA 源码状态。
+EXPECTED_DEPS="$WORKDIR/expected-build-deps.json"
+python3 "${GITHUB_WORKSPACE}/scripts/pin-build-deps.py" \
+  "$PKG" "$SERIES" debian/control "${LOCAL_REPO_DIR:-}" "$EXPECTED_DEPS"
+
 export DEBEMAIL="${DEBEMAIL:?}"
 export DEBFULLNAME="${DEBFULLNAME:?}"
 dch --force-distribution --allow-lower-version '.*' \
@@ -138,28 +144,6 @@ if [[ ! -f "$DSC" || ! -f "$CHANGES" ]]; then
   echo "::error::expected artifacts missing: ${DSC} / ${CHANGES}"
   ls -la
   exit 1
-fi
-
-# 2) 依赖版本一致性校验准备: 查依赖上游 -dev 包在 PPA 的最新版本
-DEPS_MAP="${GITHUB_WORKSPACE}/scripts/deps.map"
-declare -A EXPECTED_DEV_VERSIONS   # dev-pkg -> min version
-if [[ -f "$DEPS_MAP" ]]; then
-  DEP_LINE="$(awk -v p="$PKG" '$1==p {$1=""; sub(/^ /,""); print; exit}' "$DEPS_MAP")"
-  if [[ -n "$DEP_LINE" ]]; then
-    for pair in $DEP_LINE; do
-      DEV_PKG="${pair%%:*}"
-      SRC_PKG="${pair##*:}"
-      SRC_VER="$("${GITHUB_WORKSPACE}/scripts/get-ppa-version.sh" "$OWNER" "$PPA" "$SRC_PKG" "$SERIES" || true)"
-      if [[ -z "$SRC_VER" ]]; then
-        echo "::warning::${DEV_PKG} (from ${SRC_PKG}) not in PPA yet; skip strict check for it"
-        continue
-      fi
-      # 二进制dev包的Version与源码包相同,noepoch用作apt比较
-      DEV_VER="${SRC_VER#*:}"
-      EXPECTED_DEV_VERSIONS["$DEV_PKG"]="$DEV_VER"
-      echo "expect ${DEV_PKG} >= ${DEV_VER} (from ${SRC_PKG} ${SRC_VER})"
-    done
-  fi
 fi
 
 # 生成 pbuilder A-hook: 装完 build-dep 后 (build 前) 校验 -dev 版本
@@ -188,10 +172,9 @@ check() {
   fi
 }
 HDR
-  for dev in "${!EXPECTED_DEV_VERSIONS[@]}"; do
-    want="${EXPECTED_DEV_VERSIONS[$dev]}"
+  while IFS=$'\t' read -r dev want; do
     printf 'check %q %q\n' "$dev" "$want"
-  done
+  done < <(jq -r 'to_entries[] | [.key, .value] | @tsv' "$EXPECTED_DEPS")
   # shellcheck disable=SC2016
   echo 'exit $fail'
 } > "$HOOK"

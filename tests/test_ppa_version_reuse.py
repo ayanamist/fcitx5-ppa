@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 import unittest
 
+from build_deps_fixture import local_packages, source_control
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -25,8 +27,9 @@ class PpaVersionReuseTest(unittest.TestCase):
             (root / 'old').write_text(json.dumps({'entries': [{
                 'source_package_version': f'1.1.15-2~{self.series}1~ppa1',
                 'status': 'Published'}]}))
+            (root / 'control').write_text(source_control('libime'))
             mocks = {
-                'apt-get': 'mkdir libime-1.1.16',
+                'apt-get': 'mkdir -p libime-1.1.16/debian; cp "$FIXTURE/control" libime-1.1.16/debian/control',
                 'dpkg-parsechangelog': "echo 1.1.16-1",
                 'curl': 'case "$*" in *getBuilds*) cat "$FIXTURE/builds";; *--get*) cat "$FIXTURE/old";; *) '
                         + ('exit 22' if failure else 'cat "$FIXTURE/history"') + ';; esac',
@@ -39,6 +42,9 @@ class PpaVersionReuseTest(unittest.TestCase):
                 path.chmod(0o755)
             cache_dir = root / 'cache'
             cache_dir.mkdir()
+            repo = root / 'repo'
+            repo.mkdir()
+            (repo / 'Packages').write_text(local_packages(self.series))
             if cache:
                 control = root / 'pkg/DEBIAN'
                 control.mkdir(parents=True)
@@ -53,6 +59,7 @@ class PpaVersionReuseTest(unittest.TestCase):
                        FIXTURE=str(root), OWNER='test', PPA='test', SERIES=self.series,
                        GPG_KEY_ID='test', GITHUB_WORKSPACE=str(ROOT),
                        DEB_CACHE_DIR=str(cache_dir), DEBFULLNAME='Test',
+                       LOCAL_REPO_DIR=str(repo),
                        SOURCE_ARTIFACT_DIR=str(root / 'source-artifact'),
                        DEBEMAIL='test@example.org')
             result = subprocess.run(['bash', str(ROOT / 'scripts/build-and-upload.sh'),
